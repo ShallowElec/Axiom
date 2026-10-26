@@ -7,8 +7,10 @@ import type {
   SceneEdge,
   SceneMatrixPreview,
   SceneNode,
+  SceneGroup,
   SceneRole,
   SceneSpace,
+  SceneTableFallback,
   SceneStatus,
 } from './types.js';
 
@@ -54,6 +56,24 @@ function chapterStatus(chapterIndex: number, activeIndex: number): SceneStatus {
   if (chapterIndex < activeIndex) return 'past';
   if (chapterIndex === activeIndex) return 'active';
   return 'future';
+}
+
+function a11yTablesFor(nodes: SceneNode[]): SceneTableFallback[] {
+  return nodes
+    .filter((node) => node.matrix)
+    .map((node) => ({
+      nodeId: node.id,
+      label: node.label,
+      columns: ['', ...Array.from({ length: node.matrix!.cols }, (_, col) => String(col + 1))],
+      rows: node.matrix!.cells.map((row, rowIndex) => [
+        String(rowIndex + 1),
+        ...row.map((cell) => (cell.hidden ? '·' : cell.text)),
+      ]),
+    }));
+}
+
+function groupsFor(nodes: SceneNode[], label: string): SceneGroup[] {
+  return [{ id: 'group-current', label, kind: 'chapter', nodeIds: nodes.map((node) => node.id) }];
 }
 
 function legendFor(space: SceneSpace): Scene['legend'] {
@@ -187,12 +207,14 @@ function buildLayered(story: Story, beat: FlatBeat): Scene {
     title: story.title,
     description: story.description,
     traceRef: story.id,
+    groups: groupsFor(nodes, beat.chapterTitle),
     nodes,
     edges,
     legend: legendFor('layered'),
     a11y: {
       altText: `矩阵流水线层叠视图：${story.expression}`,
       summary: `${story.chapters.length} 个计算层，当前第 ${beat.chapterIndex + 1} 层：${beat.title}`,
+      tables: a11yTablesFor(nodes),
     },
   };
 }
@@ -248,12 +270,14 @@ function buildFlat(story: Story, beat: FlatBeat): Scene {
     title: beat.title,
     description: story.expression,
     traceRef: story.id,
+    groups: groupsFor(nodes, beat.chapterTitle),
     nodes,
     edges,
     legend: legendFor('flat'),
     a11y: {
       altText: `矩阵平铺合成视图：${beat.title}`,
       summary: nodes.map((node) => `${node.label} ${node.badge ?? ''}`).join(' → '),
+      tables: a11yTablesFor(nodes),
     },
   };
 }
@@ -327,9 +351,10 @@ export function buildDebugScene(
     title,
     description: '调试运行的抽象流水线',
     traceRef,
+    groups: groupsFor(nodes, title),
     nodes,
     edges,
     legend: legendFor('layered'),
-    a11y: { altText: title, summary: operations.join(' → ') },
+    a11y: { altText: title, summary: operations.join(' → '), tables: a11yTablesFor(nodes) },
   };
 }

@@ -1,5 +1,5 @@
 /* Axiom legacy tools stylesheet.
-   Retained only for MatrixEditor, BlockComposer and FormulaLab.
+   Retained only for MatrixEditor, BlockComposer and the Formula view.
    Main workbench styling lives in src/axiom/theme.css. */
 /* ==========================================================================
    矩阵工坊 · Matrix Atelier
@@ -1644,11 +1644,6 @@ select {
   --formula-color-unknown: #d9d5c7;
 }
 
-.formula-lab-modal {
-  width: min(1180px, 96vw);
-  max-height: calc(100vh - 40px);
-}
-
 .formula-lab-body {
   display: grid;
   grid-template-columns: 196px minmax(0, 1fr) 244px;
@@ -2245,10 +2240,6 @@ select {
   .lab-equation {
     min-height: 165px;
     margin: 8px 0;
-  }
-
-  .formula-lab-modal .modal-head h2 {
-    font-size: 23px;
   }
 
   .formula-lab-palette,

@@ -2934,7 +2934,7 @@ select {
 }
 
 /* --------------------------------------------------------------------------
-   Legacy modal re-skin (MatrixEditor + FormulaLab temporary entries)
+   Legacy tool re-skin (MatrixEditor + Block + Formula view)
    -------------------------------------------------------------------------- */
 
 .modal-overlay {
@@ -3132,16 +3132,7 @@ select {
   );
 }
 
-/* FormulaLab modal */
-.formula-lab-modal {
-  width: min(1120px, 96vw);
-  max-height: calc(100vh - 40px);
-}
-
-.formula-lab-modal .modal-head {
-  padding: 13px 18px 11px;
-}
-
+/* Formula structure view */
 .formula-lab-body {
   color: var(--ax-ink);
   background: var(--ax-paper);
@@ -4353,47 +4344,47 @@ select {
   margin-right: 1px;
 }
 
-/* Enforce the Axiom single-hue rule inside the retained FormulaLab. */
-.formula-lab-modal .lab-template-tabs button.active {
+/* Enforce the Axiom single-hue rule inside the retained Formula view. */
+.ax-formula-studio .lab-template-tabs button.active {
   color: var(--ax-paper);
   background: var(--ax-ink);
   border-color: var(--ax-ink);
 }
 
-.formula-lab-modal .lab-legend .dot,
-.formula-lab-modal .lab-legend .dot.matrix {
+.ax-formula-studio .lab-legend .dot,
+.ax-formula-studio .lab-legend .dot.matrix {
   background: var(--ax-accent);
 }
 
-.formula-lab-modal .lab-legend .dot.number {
+.ax-formula-studio .lab-legend .dot.number {
   background: var(--ax-ink);
 }
 
-.formula-lab-modal .lab-legend .dot.slot {
+.ax-formula-studio .lab-legend .dot.slot {
   background: transparent;
   border: 1px dashed var(--ax-ink-2);
 }
 
-.formula-lab-modal .lab-symbol.matrix {
+.ax-formula-studio .lab-symbol.matrix {
   border-color: var(--ax-rule-strong);
 }
 
-.formula-lab-modal .lab-symbol.number {
+.ax-formula-studio .lab-symbol.number {
   border-color: var(--ax-rule-strong);
 }
 
-.formula-lab-modal .lab-symbol.matrix:hover,
-.formula-lab-modal .lab-symbol.number:hover {
+.ax-formula-studio .lab-symbol.matrix:hover,
+.ax-formula-studio .lab-symbol.number:hover {
   border-color: var(--ax-accent);
   background: var(--ax-accent-soft);
 }
 
-.formula-lab-modal .lab-check.error .lab-check-mark {
+.ax-formula-studio .lab-check.error .lab-check-mark {
   color: var(--ax-paper);
   background: var(--ax-ink);
 }
 
-.formula-lab-modal .lab-check.error {
+.ax-formula-studio .lab-check.error {
   background: var(--ax-paper);
 }
 
@@ -5126,4 +5117,199 @@ select {
 
 .matrix-mini .mini-bracket {
   color: var(--ax-ink-2);
+}
+
+/* Central formula structure view */
+.ax-formula-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--ax-paper);
+}
+
+.ax-formula-view-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  padding: 10px 14px 9px;
+  border-bottom: 1px solid var(--ax-rule);
+}
+
+.ax-formula-view-head h2 {
+  margin: 3px 0 2px;
+  color: var(--ax-ink);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.ax-formula-view-head p {
+  margin: 0;
+  color: var(--ax-ink-2);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.ax-formula-view-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding-top: 2px;
+}
+
+.ax-formula-studio {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ax-formula-studio .formula-lab-body {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: 178px minmax(0, 1fr) 252px;
+  color: var(--ax-ink);
+  background: var(--ax-paper);
+}
+
+.ax-formula-studio .formula-lab-palette {
+  background: var(--ax-surface-2);
+  border-right: 1px solid var(--ax-rule);
+}
+
+.ax-formula-studio .formula-lab-canvas {
+  background: var(--ax-paper);
+}
+
+.ax-formula-studio .formula-lab-inspector {
+  background: var(--ax-surface-2);
+  border-left: 1px solid var(--ax-rule);
+}
+
+.ax-formula-studio .formula-lab-palette > p,
+.ax-formula-studio .lab-template-description,
+.ax-formula-studio .lab-footnote {
+  color: var(--ax-ink-2);
+}
+
+.ax-formula-studio .formula-lab-palette .micro-label,
+.ax-formula-studio .formula-lab-inspector .micro-label {
+  color: var(--ax-ink-3);
+}
+
+.ax-formula-studio .lab-template-tabs {
+  border-bottom-color: var(--ax-rule);
+}
+
+.ax-formula-studio .lab-template-tabs button {
+  border-radius: 0;
+}
+
+.ax-formula-studio .lab-template-tabs button.active {
+  color: var(--ax-paper);
+  background: var(--ax-ink);
+}
+
+.ax-formula-studio .lab-message,
+.ax-formula-studio .lab-check,
+.ax-formula-studio .lab-shape-readout,
+.ax-formula-studio .lab-latex,
+.ax-formula-studio .lab-actions {
+  border-radius: 0;
+}
+
+.ax-formula-studio .lab-check.ok {
+  color: var(--ax-ink);
+  background: var(--ax-accent-soft);
+  border-color: var(--ax-rule-strong);
+}
+
+.ax-formula-studio .lab-check.error {
+  color: var(--ax-ink);
+  background: var(--ax-paper);
+  border-color: var(--ax-rule-strong);
+}
+
+.ax-formula-studio .lab-drop-slot {
+  border-radius: 0;
+}
+
+.ax-formula-studio .lab-drop-slot:hover,
+.ax-formula-studio .lab-drop-slot.selected {
+  border-color: var(--ax-accent);
+}
+
+.ax-formula-studio .lab-drop-slot.filled {
+  background: var(--ax-accent-soft);
+  border-color: var(--ax-rule-strong);
+}
+
+.ax-formula-studio .lab-symbol,
+.ax-formula-studio .lab-example-button,
+.ax-formula-studio .primary-button,
+.ax-formula-studio .lab-secondary {
+  border-radius: 0;
+}
+
+.ax-formula-studio .primary-button {
+  color: var(--ax-paper);
+  background: var(--ax-ink);
+  border-color: var(--ax-ink);
+}
+
+.ax-formula-studio .lab-secondary {
+  color: var(--ax-ink);
+  background: var(--ax-paper);
+  border-color: var(--ax-rule);
+}
+
+@media (max-width: 1250px) {
+  .ax-formula-studio .formula-lab-body {
+    grid-template-columns: 150px minmax(0, 1fr) 220px;
+  }
+}
+
+.ax-formula-mode {
+  --ax-inspector-width: 0px !important;
+}
+
+.ax-formula-mode .ax-split-inspector {
+  display: none;
+}
+
+.ax-formula-studio .lab-equation {
+  flex-wrap: nowrap;
+  min-height: 220px;
+  padding: 22px 14px;
+  background: var(--ax-paper);
+  border-color: var(--ax-rule);
+  border-radius: 0;
+}
+
+.ax-formula-studio .lab-drop-slot {
+  min-width: 118px;
+}
+
+.ax-formula-studio .formula-lab-canvas {
+  color: var(--ax-ink);
+}
+
+.ax-formula-studio .lab-operator,
+.ax-formula-studio .lab-operator-word {
+  color: var(--ax-accent);
+}
+
+@media (max-width: 1250px) {
+  .ax-formula-studio .lab-equation {
+    min-height: 180px;
+  }
+
+  .ax-formula-studio .lab-drop-slot {
+    min-width: 96px;
+  }
 }

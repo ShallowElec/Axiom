@@ -31,9 +31,9 @@ import BlockModal from './components/BlockModal.js';
 import MatrixEditorModal from './components/MatrixEditorModal.js';
 import { Icon } from './components/Icons.js';
 
-const FormulaLabModal = lazy(() => import('./components/FormulaLabModal.js'));
+const FormulaView = lazy(() => import('./axiom/components/FormulaView.js'));
 
-type ViewMode = 'stage' | 'flat' | 'layers';
+type ViewMode = 'stage' | 'flat' | 'layers' | 'formula';
 
 interface EditorState {
   open: boolean;
@@ -76,7 +76,6 @@ export default function AxiomApp() {
     : null;
   const [editor, setEditor] = useState<EditorState>({ open: false, matrix: null });
   const [template, setTemplate] = useState<FormulaTemplate | null>(null);
-  const [formulaLabOpen, setFormulaLabOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [syntaxOpen, setSyntaxOpen] = useState(false);
   const [storedRunId, setStoredRunId] = useState<string | null>(null);
@@ -85,7 +84,7 @@ export default function AxiomApp() {
 
   const analysis = useMemo(() => analyzeWorkbenchDocument(workbenchDocument), [workbenchDocument]);
   const suggestedName = useMemo(() => nextMatrixName(workbenchDocument.objects), [workbenchDocument.objects]);
-  const modalOpen = editor.open || template !== null || formulaLabOpen || commandOpen || blockOpen || syntaxOpen;
+  const modalOpen = editor.open || template !== null || commandOpen || blockOpen || syntaxOpen;
 
   const showToast = useCallback((message: string, type: 'info' | 'error' = 'info'): void => {
     setToast({ message, type, id: Date.now() });
@@ -141,6 +140,7 @@ export default function AxiomApp() {
   const handleRun = useCallback((): void => {
     const result = store.run({ autoPlay: !prefersReducedMotion() });
     if (result.ok) {
+      setView('stage');
       openReplay('replay');
       if (result.run) showToast(`RUN ${result.run.id} · ${result.run.steps.length} steps · derived trace`);
     } else {
@@ -300,18 +300,20 @@ export default function AxiomApp() {
 
   const commands: CommandAction[] = [
     { id: 'run', group: 'RUN', label: 'Run current expression', detail: 'Create a new immutable run', shortcut: 'F5', icon: 'play', run: handleRun },
-    { id: 'runs', group: 'RUN', label: 'Open run history', detail: `${runs.length} in-memory runs`, shortcut: 'RUNS', icon: 'table', run: () => { setResourceMode('runs'); setResourceOpen(true); } },
+    { id: 'loop', group: 'RUN', label: replay.loop ? 'Disable replay loop' : 'Enable replay loop', detail: 'Repeat the current run', shortcut: '[ ]', icon: 'reset', run: () => store.setLoop(!replay.loop) },
+    { id: 'runs', group: 'RUN', label: 'Open run history', detail: `${runs.length} in-memory runs`, icon: 'table', run: () => { setResourceMode('runs'); setResourceOpen(true); } },
     { id: 'stage', group: 'VIEW', label: 'Switch to Stage', detail: '2D execution canvas', shortcut: '1', icon: 'grid', run: () => setView('stage') },
     { id: 'flat', group: 'VIEW', label: 'Switch to Flat', detail: 'Tiled synthesis view', shortcut: '2', icon: 'table', run: () => setView('flat') },
     { id: 'layers', group: 'VIEW', label: 'Switch to Layers', detail: 'Execution layer stack', shortcut: '3', icon: 'layers', run: () => setView('layers') },
+    { id: 'formula', group: 'VIEW', label: 'Switch to Formula', detail: 'Typed AST structure authoring', shortcut: '4', icon: 'spark', run: () => setView('formula') },
     { id: 'objects', group: 'RESOURCE', label: 'Open Objects', detail: 'Session matrices and vectors', icon: 'grid', run: () => { setResourceMode('objects'); setResourceOpen(true); } },
     { id: 'formulas', group: 'RESOURCE', label: 'Open Formulas', detail: 'Formula assets', icon: 'template', run: () => { setResourceMode('formulas'); setResourceOpen(true); } },
     { id: 'algorithms', group: 'RESOURCE', label: 'Open Algorithms', detail: 'Registered functions and algorithms', icon: 'function', run: () => { setResourceMode('algorithms'); setResourceOpen(true); } },
-    { id: 'console', group: 'DEBUG', label: 'Open Console', detail: 'Run a registered function', shortcut: 'CONSOLE', icon: 'terminal', run: handleOpenConsole },
-    { id: 'new-matrix', group: 'EDIT', label: 'New matrix', detail: 'Open the matrix editor', icon: 'plus', run: openNewMatrix },
-    { id: 'formula-lab', group: 'FORMULA', label: 'Open Formula Structure Lab', detail: 'Typed AST slot prototype', icon: 'spark', run: () => setFormulaLabOpen(true) },
-    { id: 'block', group: 'EDIT', label: 'Open Block Composer', detail: 'Compose a matrix from blocks', icon: 'grid', run: () => setBlockOpen(true) },
-    { id: 'syntax', group: 'REFERENCE', label: 'Open expression syntax', detail: 'Operations, examples and exact-Q notes', icon: 'book', run: () => setSyntaxOpen(true) },
+    { id: 'console', group: 'DEBUG', label: 'Open Console', detail: 'Run a registered function', shortcut: '⌘J', icon: 'terminal', run: handleOpenConsole },
+    { id: 'new-matrix', group: 'EDIT', label: 'New matrix', detail: 'Open the matrix editor', shortcut: 'N', icon: 'plus', run: openNewMatrix },
+    { id: 'formula-lab', group: 'FORMULA', label: 'Open Formula Structure', detail: 'Typed AST slot authoring in the center view', icon: 'spark', run: () => setView('formula') },
+    { id: 'block', group: 'EDIT', label: 'Open Block Composer', detail: 'Compose a matrix from blocks', shortcut: 'B', icon: 'grid', run: () => setBlockOpen(true) },
+    { id: 'syntax', group: 'REFERENCE', label: 'Open expression syntax', detail: 'Operations, examples and exact-Q notes', shortcut: '?', icon: 'book', run: () => setSyntaxOpen(true) },
     { id: 'theme', group: 'UI', label: `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`, detail: 'Theme is session-only', icon: theme === 'light' ? 'moon' : 'sun', run: () => setTheme((current) => current === 'light' ? 'dark' : 'light') },
     { id: 'resource-toggle', group: 'UI', label: resourceOpen ? 'Collapse resource dock' : 'Expand resource dock', detail: 'Panel state is in-memory', icon: 'panel', run: () => setResourceOpen((open) => !open) },
     { id: 'dock-toggle', group: 'UI', label: dockOpen ? 'Collapse replay dock' : 'Expand replay dock', detail: 'Timeline / trace / console', icon: 'terminal', run: () => setDockOpen((open) => !open) },
@@ -328,12 +330,17 @@ export default function AxiomApp() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof Element ? event.target : null;
       const typing = Boolean(target?.closest('input, textarea, select, button, [contenteditable="true"]'));
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         if (commandOpen) setCommandOpen(false);
         else if (!modalOpen) setCommandOpen(true);
+        return;
+      }
+      if (!modalOpen && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        handleOpenConsole();
         return;
       }
       if (event.key === 'F5') {
@@ -343,6 +350,34 @@ export default function AxiomApp() {
       }
       if (modalOpen) return;
       if (typing) return;
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        const viewShortcut = ({ '1': 'stage', '2': 'flat', '3': 'layers', '4': 'formula' } as const)[event.key];
+        if (viewShortcut) {
+          event.preventDefault();
+          setView(viewShortcut);
+          return;
+        }
+        if (event.key.toLowerCase() === 'n') {
+          event.preventDefault();
+          openNewMatrix();
+          return;
+        }
+        if (event.key.toLowerCase() === 'b') {
+          event.preventDefault();
+          setBlockOpen(true);
+          return;
+        }
+        if (event.key === '?') {
+          event.preventDefault();
+          setSyntaxOpen(true);
+          return;
+        }
+        if (event.key === '[' || event.key === ']') {
+          event.preventDefault();
+          store.setLoop(event.key === ']');
+          return;
+        }
+      }
       if (event.code === 'Space') {
         event.preventDefault();
         if (run) {
@@ -374,7 +409,7 @@ export default function AxiomApp() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commandOpen, handleRun, modalOpen, replay.detail, replay.status, run, store]);
+  }, [commandOpen, handleOpenConsole, handleRun, modalOpen, openNewMatrix, replay.detail, replay.status, run, store]);
 
   const resourceCounts = {
     objects: workbenchDocument.objects.length,
@@ -412,10 +447,10 @@ export default function AxiomApp() {
         />
 
         <div
-          className={`ax-workspace-main ${resourceOpen ? '' : 'resource-closed'} ${dockOpen ? '' : 'dock-closed'}`}
+          className={`ax-workspace-main ${resourceOpen ? '' : 'resource-closed'} ${dockOpen ? '' : 'dock-closed'} ${view === 'formula' ? 'formula-mode' : ''}`}
           style={{
             '--ax-resource-width': `${layout.resource}px`,
-            '--ax-inspector-width': `${layout.inspector}px`,
+            '--ax-inspector-width': view === 'formula' ? '0px' : `${layout.inspector}px`,
             '--ax-dock-height': dockOpen ? `${layout.dock}px` : '30px',
           } as React.CSSProperties}
         >
@@ -430,16 +465,18 @@ export default function AxiomApp() {
               onChange={(resource) => setLayout((current) => ({ ...current, resource }))}
             />
           )}
-          <SplitHandle
-            direction="x"
-            value={layout.inspector}
-            min={270}
-            max={maxInspector}
-            invert
-            className="ax-split-inspector"
-            label="Resize inspector"
-            onChange={(inspector) => setLayout((current) => ({ ...current, inspector }))}
-          />
+          {view !== 'formula' && (
+            <SplitHandle
+              direction="x"
+              value={layout.inspector}
+              min={270}
+              max={maxInspector}
+              invert
+              className="ax-split-inspector"
+              label="Resize inspector"
+              onChange={(inspector) => setLayout((current) => ({ ...current, inspector }))}
+            />
+          )}
           {dockOpen && (
             <SplitHandle
               direction="y"
@@ -465,7 +502,7 @@ export default function AxiomApp() {
             onEditMatrix={openEditMatrix}
             onInsertMatrix={handleInsertMatrix}
             onOpenFormula={(nextTemplate) => setTemplate(nextTemplate)}
-            onOpenFormulaLab={() => setFormulaLabOpen(true)}
+            onOpenFormulaView={() => setView('formula')}
             onOpenAlgorithm={handleOpenAlgorithm}
             onOpenConsole={handleOpenConsole}
             onOpenSyntax={() => setSyntaxOpen(true)}
@@ -487,7 +524,7 @@ export default function AxiomApp() {
             <section className="ax-view">
               <div className="ax-viewbar">
                 <div className="ax-viewtabs" role="tablist" aria-label="View">
-                  {(['stage', 'flat', 'layers'] as const).map((entry) => (
+                  {(['stage', 'flat', 'layers', 'formula'] as const).map((entry) => (
                     <button
                       type="button"
                       role="tab"
@@ -496,14 +533,20 @@ export default function AxiomApp() {
                       className={`ax-viewtab ${view === entry ? 'active' : ''}`}
                       onClick={() => setView(entry)}
                     >
-                      {entry === 'stage' ? 'STAGE' : entry === 'flat' ? 'FLAT' : 'LAYERS'}
+                      {entry === 'stage' ? 'STAGE' : entry === 'flat' ? 'FLAT' : entry === 'layers' ? 'LAYERS' : 'FORMULA'}
                     </button>
                   ))}
                 </div>
                 <div className="ax-viewtools">
-                  <span className="ax-chip">{run ? `RUN ${run.id.replace('run-', '')}` : 'NO RUN'}</span>
-                  {stale && <span className="ax-chip hatch">STALE</span>}
-                  <span className="ax-chip sky">DERIVED</span>
+                  {view === 'formula' ? (
+                    <span className="ax-chip sky">AUTHORING</span>
+                  ) : (
+                    <>
+                      <span className="ax-chip">{run ? `RUN ${run.id.replace('run-', '')}` : 'NO RUN'}</span>
+                      {stale && <span className="ax-chip hatch">STALE</span>}
+                      <span className="ax-chip sky">DERIVED</span>
+                    </>
+                  )}
                   <button type="button" className="ax-icon-button" onClick={() => setView('stage')} title="Reset to stage" aria-label="Reset to stage">
                     <Icon name="compass" size={13} strokeWidth={1.5} />
                   </button>
@@ -530,9 +573,28 @@ export default function AxiomApp() {
                 )}
                 {view === 'flat' && <FlatView scene={scene} selection={selection} onSelectNode={handleSelectSceneNode} />}
                 {view === 'layers' && <LayersView scene={scene} selection={selection} onSelectNode={handleSelectSceneNode} />}
+                {view === 'formula' && (
+                  <Suspense fallback={<div className="ax-formula-loading">LOADING FORMULA VIEW…</div>}>
+                    <FormulaView
+                      matrices={workbenchDocument.objects}
+                      onOpenInStage={(expression) => {
+                        const result = store.run({ expression, autoPlay: !prefersReducedMotion() });
+                        if (result.ok) {
+                          setView('stage');
+                          openReplay('replay');
+                          showToast(`Structure expression loaded: ${expression}`);
+                        } else {
+                          setView('stage');
+                          openReplay('problems');
+                          showToast(result.error ?? 'Structure run failed.', 'error');
+                        }
+                      }}
+                    />
+                  </Suspense>
+                )}
               </div>
 
-              <div className="ax-transport">
+              {view !== 'formula' && <div className="ax-transport">
                 <button type="button" className="ax-control" onClick={() => run && store.seekStep(0)} disabled={!run?.steps.length} title="Start" aria-label="Start">
                   <Icon name="rewind" size={12} strokeWidth={1.5} />
                 </button>
@@ -560,10 +622,11 @@ export default function AxiomApp() {
                 <select className="ax-speed" value={replay.speed} onChange={(event) => store.setSpeed(Number(event.target.value))} aria-label="Speed">
                   {[0.25, 0.5, 1, 2, 4].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}
                 </select>
-              </div>
+              </div>}
             </section>
           </main>
 
+          {view !== 'formula' && (
           <Inspector
             run={run}
             step={step}
@@ -581,6 +644,7 @@ export default function AxiomApp() {
             onStoreResult={handleStoreResult}
             onRunAgain={handleRunAgain}
           />
+          )}
 
           <ReplayDock
             open={dockOpen}
@@ -643,27 +707,6 @@ export default function AxiomApp() {
       />
 
       <SyntaxDialog open={syntaxOpen} onClose={() => setSyntaxOpen(false)} />
-
-      {formulaLabOpen && (
-        <Suspense fallback={<div className="ax-formula-loading">LOADING STRUCTURE LAB…</div>}>
-          <FormulaLabModal
-            open
-            matrices={workbenchDocument.objects}
-            onClose={() => setFormulaLabOpen(false)}
-            onOpenInStage={(expression) => {
-              setFormulaLabOpen(false);
-              const result = store.run({ expression, autoPlay: !prefersReducedMotion() });
-              if (result.ok) {
-                openReplay('replay');
-                showToast(`Structure expression loaded: ${expression}`);
-              } else {
-                openReplay('problems');
-                showToast(result.error ?? 'Structure run failed.', 'error');
-              }
-            }}
-          />
-        </Suspense>
-      )}
 
       <CommandPalette open={commandOpen} actions={commands} onClose={() => setCommandOpen(false)} />
 

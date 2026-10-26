@@ -313,7 +313,7 @@ RunRecord + ReplayCursor + Selection
 | `TemplateModal` | 公式资源/检查器替代；可暂时保留为 dev 过渡但不作为主流程 |
 | `OpsModal` | 算法资源替代；删除满屏手册弹窗 |
 | `BlockModal` | 可暂时保留为一个临时面板重新皮肤 |
-| `FormulaLabModal` | 本刀可保留，下一刀迁移到中央 Formula 视图 |
+| `FormulaView` | Phase D 已迁移到中央 Formula 视图 |
 | `scene`/`renderers/scene` | 升级 source IDs，重写 renderer 外观但保留数据边界 |
 
 ## 8. 命名、包与品牌迁移

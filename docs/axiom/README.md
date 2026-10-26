@@ -75,7 +75,7 @@
 - Phase B + C 已实施：[06-implementation-log.md](06-implementation-log.md)。
 - Phase D 已实施：[07-phase-d-log.md](07-phase-d-log.md)。
 - 本轮未做持久化、真 step fork、native trace、WASM/AD/MX；这些仍是后续阶段。
-- 旧主壳层文件已删除；旧 CSS 仅保留给临时 MatrixEditor/Block/FormulaLab 使用。
+- 旧主壳层文件已删除；旧 CSS 仅保留给临时 MatrixEditor/Block 与 Formula 中央视图使用。
 
 ## 6. 评审方式
 

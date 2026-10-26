@@ -1,7 +1,7 @@
 # 07 · Phase D 实施记录：Axiom 工作台补完
 
-> 状态：已实施，2026-10-26。  
-> 范围：命令面板、可拖拽分栏、Block Composer、Ops/Syntax reference、Scene v2、旧主壳删除。  
+> 状态：已实施，2026-10-26。
+> 范围：命令面板、可拖拽分栏、Block Composer、Ops/Syntax reference、Scene v2、Formula 中央视图、键盘路径、旧主壳删除。
 > 仍然不做：持久化、native kernel trace、真正 step fork、WASM/AD/MX、完整公式编辑器。
 
 ## 1. 本轮落地
@@ -40,8 +40,22 @@
 - `Scene.schemaVersion` 升为 2。
 - 增加 `SceneGroup` 类型、`Scene.sourceStepId`、Scene node 的 `sourceStepId` / `sourceValueIds`。
 - DerivedTraceAdapter 为每个 step 的 flat/layered Scene 填 source step / value IDs。
-- Runtime 测试覆盖 schemaVersion 2、scene sourceStepId、node sourceStepId。
-- 完整 groups/channels/table fallback 仍是后续 Scene v2 细化，不伪称已完成。
+- 每个 Scene 现在带当前 chapter 的 `groups`，以及每个矩阵节点的 `a11y.tables` 表格 fallback；隐藏 cell 用 `·` 表示。
+- Runtime 测试覆盖 schemaVersion 2、scene sourceStepId、node sourceStepId、groups 和 a11y tables。
+- channels 和更复杂的 table grouping 仍是后续细化。
+
+### Formula 中央视图
+
+- 新增 `FORMULA` 中央视图，不再使用临时 FormulaLab 模态。
+- 复用 typed AST / KaTeX / 槽位与 shape 检查；Formula 视图打开时隐藏右侧运行检查器，把宽度让给结构编辑。
+- 送入演算台会切回 Stage，并通过同一 `WorkbenchStore.run()` 生成 Run/Trace/Replay。
+- 完整通用公式编辑器仍后置；当前是受控三模板原型。
+
+### 键盘路径
+
+- `1/2/3/4` 切 Stage/Flat/Layers/Formula；`⌘/Ctrl+J` 打开 Console。
+- `N` 新建矩阵、`B` 打开 Block Composer、`?` 打开 Syntax reference。
+- 命令面板中的快捷键标签与实际 handler 对齐。
 
 ### 旧主壳清理
 
@@ -62,28 +76,29 @@
 
 - `MatrixEditorModal`（临时入口）
 - `BlockModal`
-- `FormulaLabModal`（临时入口）
 - `MatrixPanel`（Block 预览需要）
 - `Modal` / `Icons`
 
-旧 `styles.css` 已裁剪为 `src/legacy-tools.css`（约 38KB），只保留 MatrixEditor、BlockModal、FormulaLab 及其共享 modal 控件所需段；新 Axiom 主界面完全走 `src/axiom/theme.css`。
+旧 `styles.css` 已裁剪为 `src/legacy-tools.css`（约 38KB），只保留 MatrixEditor、BlockModal、Formula 中央视图及其共享控件所需段；新 Axiom 主界面完全走 `src/axiom/theme.css`。
 
 ## 2. 验证
 
 - `npm run typecheck`：通过。
 - `npm test`：103 项通过（core 41、debug 19、formula 31、scene/runtime 7、architecture 5）。
-- `npm run build`：通过；CSS 从旧 212.9 KB 裁到 138.8 KB（gzip 36.9 → 23.1 KB），保留的临时模态仍通过生产截图检查。
+- `npm run build`：通过；CSS 从旧 212.9 KB 裁到 141.9 KB（gzip 36.9 → 23.4 KB），保留的临时模态与 Formula 中央视图仍通过生产截图检查。
 - 手工验证：
   - Cmd/Ctrl+K → search/select/execute/Esc。
+  - `1/2/3/4` 视图切换、`N/B/?/⌘J/[ ]` 主操作快捷键。
   - 拖动 resource/inspector/dock；1120 下中央工作区不被压穿。
   - Block Composer → 生成矩阵 + 13-step derived run。
+  - Formula 中央视图 → 装填示例 → 送入 Stage → 9-step derived run。
   - Syntax reference 搜索和 examples。
   - Dark mode 下 Block Composer 与 Syntax 可读。
   - 先前 B+C 的 Run/Replay/Stale/Flat/Layers/Console 流程不回归。
 
 ## 3. 后置项
 
-- 临时 MatrixEditor / FormulaLab 重做后，删除 `src/legacy-tools.css` 的最后残留。
-- 完整中央 FormulaLab view、Scene v2 groups/channels/table fallback。
+- 临时 MatrixEditor 重做后，删除 `src/legacy-tools.css` 的最后残留。
 - 真实 step checkpoint/fork、native trace、WASM/AD/MX。
 - 可拆卸窗口、布局 preset、命令面板自定义命令。
+- 通用公式编辑器、Scene channels 与更复杂的 table grouping。

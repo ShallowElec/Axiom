@@ -57,6 +57,8 @@ describe('architecture boundaries', () => {
     expect(app).toMatch(/SplitHandle/);
     expect(app).toMatch(/BlockModal/);
     expect(app).toMatch(/SyntaxDialog/);
+    expect(app).toMatch(/FormulaView/);
+    expect(app).not.toMatch(/FormulaLabModal/);
     expect(() => source('src/App.tsx')).toThrow();
     expect(() => source('src/workspace/project.ts')).toThrow();
   });

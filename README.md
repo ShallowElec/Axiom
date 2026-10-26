@@ -36,11 +36,12 @@ Axiom 是一套本地优先、可检查执行过程的数学工作台。它把�
 - 精确有理数矩阵内核（BigInt/Q），支持 1×1 到 10×10 矩阵，整数、小数、分数。
 - 表达式：`+ − × ÷ ^`、`⊙`、`⊗`、转置、`det / inv / rank / trace / rref / adj / solve / minor`；复合表达式自动拆解。
 - 11 条公式模板，经新的 Axiom Formula Asset 对话框装填；不再打开旧的画廊模态。
+- **Formula 中央视图**：Stage/Flat/Layers 之外新增 FORMULA 视图，typed AST / 槽位 / 形状检查直接在中央编辑；旧的 FormulaLab 模态已移除。
 - Block Composer 与表达式 Syntax reference 已迁入新 Axiom IA。
 - 2D Stage、Flat 平铺、Layers 执行层叠共享同一份 Scene + 同一 cursor/selection。
 - 矩阵 cell 使用天蓝/黑/白语义高亮；没有第三色相。
 - Inspector 展示 shape、dtype、value、source step、provenance、microframes；结果矩阵可存回当前 session。
-- Scene `schemaVersion: 2`，scene/node 带 `sourceStepId` / `sourceValueIds`，供视图与检查器反查。
+- Scene `schemaVersion: 2`，scene/node 带 `sourceStepId` / `sourceValueIds`，并加入 SceneGroup 与 a11y table fallback；供视图与检查器反查。
 
 ![平铺视图](screenshots/axiom-flat.jpg)
 
@@ -71,8 +72,10 @@ Axiom 是一套本地优先、可检查执行过程的数学工作台。它把�
 ### 公式资产与结构实验
 
 - 公式模板装填：Axiom 风格的 Formula Asset 对话框，验证 shape 约束后创建新 run。
-- 保留临时 FormulaLab：typed AST / KaTeX / 槽位吸附 / 结构预览；完整公式编辑器仍后置。
+- Formula structure 已进入中央 FORMULA 视图；完整通用公式编辑器仍后置。
 - 保留临时 MatrixEditor：矩阵编辑仍可完成，完整重做留给后续。
+
+![Formula 中央视图](screenshots/axiom-formula-view.jpg)
 
 ![公式装填](screenshots/axiom-formula.jpg)
 
@@ -108,6 +111,10 @@ MATRIX_NO_SANDBOX=1 npm start
 | 键 | 动作 |
 |---|---|
 | `⌘/Ctrl + K` | 打开命令面板 |
+| `1` / `2` / `3` / `4` | Stage / Flat / Layers / Formula |
+| `⌘/Ctrl + J` | 打开 Console |
+| `N` / `B` / `?` | 新建矩阵 / Block Composer / Syntax reference |
+| `[` / `]` | 清除 / 设置 replay loop |
 | `F5` | 运行当前表达式 |
 | `Space` | 播放 / 暂停重播 |
 | `←` / `→` | 上一/下一 step（Micro 模式下为 microframe） |
@@ -158,7 +165,7 @@ src/
   scene/                        renderer-neutral Scene
   debug/                        算法注册表 + 函数调试数据模型（新 Console 使用）
   formula/                      headless formula AST / KaTeX / palette
-  components/                   保留的临时 MatrixEditor / FormulaLab
+  components/                   保留的临时 MatrixEditor 与 Block Composer
   content/                      示例矩阵与公式模板
   workspace/                    共享编辑器 payload 类型；旧项目存储已移除
 docs/axiom/                     Phase B+C+D 设计、重播契约、实施记录
@@ -178,7 +185,7 @@ docs/axiom/                     Phase B+C+D 设计、重播契约、实施记录
   - Command palette search/select/execute/Escape
   - Syntax reference search and examples
   - drag resource / inspector / replay dock; 1120×760 re-clamp
-  - FormulaLab → send to stage
+  - Formula 中央视图 → 装填示例 → 送入 Stage
   - Light / Dark；1440×940 与 1120×760；资源栏折叠
   - failed expression → Problems；没有成功态或结果假象
 
@@ -200,7 +207,7 @@ docs/axiom/                     Phase B+C+D 设计、重播契约、实施记录
 - 持久化：项目文件、保存/恢复、导出、旧数据迁移。
 - 真正的 step checkpoint / fork。
 - native kernel trace、Rust/WASM 核心、AD/VJP、MX/FP4–FP64 精度实验室。
-- 完整 typed formula editor、公式结构实验的中央化。
-- 完整 Scene v2 groups/channels/table fallback、可分离调试窗口。
+- 完整通用 typed formula editor（当前中央视图仍是受控原型）。
+- 可分离调试窗口、自定义命令与真正的多窗口调试。
 
 > 目标仍是先把“运行、检查、重播、组合”做成真实的产品能力，再扩大数学域与执行后端；不把尚未实现的 native/fork/持久化能力做成假入口。

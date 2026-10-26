@@ -97,7 +97,7 @@ compact list rows
 
 - 列表显示公式名、分类、单行 LaTeX 预览/纯文本、来源。
 - 选中显示检查器中的输入约束和可加载动作；双击或 Enter 装填表达式。
-- 公式仓库不再是模态画廊；`Formula structure lab` 作为可进入的中央视图/独立面板，后续阶段加入。
+- 公式仓库不再是模态画廊；`Formula structure lab` 已作为中央 `FORMULA` 视图加入；完整通用公式编辑器仍后置。
 
 #### Algorithms
 
@@ -326,7 +326,7 @@ session 初始化：
 | `OpsModal` | Algorithms 资源 | 不再用独立满屏手册 |
 | `BlockModal` | 中央命令/临时面板 | 第一刀可保留为矩阵编辑类浮层，后续再嵌入 |
 | `MatrixEditorModal` | 临时编辑面板 | 保留，但白底、直角、紧凑 |
-| `FormulaLabModal` | Formula 结构视图/临时面板 | 本阶段可保留，作为未来中央 Formula 视图的过渡 |
+| `FormulaView` | Formula 结构视图 | Phase D 已进入中央 view；完整通用公式编辑器仍后置 |
 | `scene` 层叠/平铺 | 中央 Flat/Layers tabs | 保留数据与渲染，去色/去发光 |
 | 项目保存/导出/恢复 | 无 | 明确删除，不提供假入口 |
 
@@ -411,6 +411,6 @@ session 初始化：
 
 - 资源栏默认宽度 264 还是 256（建议 264；视觉评审时可微调）。
 - 是否在顶部命令栏放“Run without replay”或只在命令面板提供。
-- 公式结构实验当前放在资源/临时面板还是中央 view（建议本阶段仍可从 Formulas 打开，中央化在公式阶段完成）。
+- 公式结构实验已进入中央 `FORMULA` view；完整通用公式编辑器仍在后续阶段。
 - 检查器默认 tab：Overview 还是 Data（建议 Overview）。
 - 是否在第一刀保留 BlockModal 的现有交互（建议保留但重新皮肤）。

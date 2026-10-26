@@ -30,6 +30,9 @@ describe('Axiom workbench runtime', () => {
     expect(run.scenes[run.steps[0]!.id]?.layered.space).toBe('layered');
     expect(run.scenes[run.steps[0]!.id]?.flat.schemaVersion).toBe(2);
     expect(run.scenes[run.steps[0]!.id]?.flat.sourceStepId).toBe(run.steps[0]!.id);
+    const flat = run.scenes[run.steps[0]!.id]!.flat;
+    expect(flat.groups?.[0]?.nodeIds.length).toBe(flat.nodes.length);
+    expect(flat.a11y.tables?.length).toBeGreaterThan(0);
     expect(run.scenes[run.steps[0]!.id]?.flat.nodes.every((node) => node.sourceStepId === run.steps[0]!.id)).toBe(true);
     for (const step of run.steps) {
       expect(step.microframeIds.length).toBeGreaterThan(0);

@@ -18,7 +18,7 @@ interface ResourceDockProps {
   onEditMatrix: (matrix: StoredMatrix) => void;
   onInsertMatrix: (name: string) => void;
   onOpenFormula: (template: FormulaTemplate) => void;
-  onOpenFormulaLab: () => void;
+  onOpenFormulaView: () => void;
   onOpenAlgorithm: (definition: DebugFunctionDefinition) => void;
   onOpenConsole: () => void;
   onOpenSyntax: () => void;
@@ -44,7 +44,7 @@ export default function ResourceDock({
   onEditMatrix,
   onInsertMatrix,
   onOpenFormula,
-  onOpenFormulaLab,
+  onOpenFormulaView,
   onOpenAlgorithm,
   onOpenConsole,
   onOpenSyntax,
@@ -76,7 +76,7 @@ export default function ResourceDock({
   const headerAction = mode === 'objects'
     ? <button type="button" className="ax-row-icon" onClick={onCreateMatrix} title="New matrix" aria-label="New matrix"><Icon name="plus" size={14} /></button>
     : mode === 'formulas'
-      ? <button type="button" className="ax-row-icon" onClick={onOpenFormulaLab} title="Open structure lab" aria-label="Open structure lab"><Icon name="spark" size={14} /></button>
+      ? <button type="button" className="ax-row-icon" onClick={onOpenFormulaView} title="Open structure lab" aria-label="Open structure lab"><Icon name="spark" size={14} /></button>
       : null;
 
   return (
@@ -161,7 +161,7 @@ export default function ResourceDock({
           </>
         )}
         {mode === 'formulas' && (
-          <button type="button" className="ax-button primary tiny" onClick={onOpenFormulaLab}><Icon name="spark" size={11} /> STRUCTURE LAB</button>
+          <button type="button" className="ax-button primary tiny" onClick={onOpenFormulaView}><Icon name="spark" size={11} /> STRUCTURE LAB</button>
         )}
         {mode === 'algorithms' && (
           <>

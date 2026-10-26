@@ -87,7 +87,7 @@
 
 - 全部矩阵操作/公式模板/分块/表达式/调试函数的 Run 适配。
 - Objects / Formulas / Algorithms / Runs 资源栏。
-- Formula structure lab 的新入口（保留现有功能，完整 Formula canvas 仍后置）。
+- Formula structure lab 已升级为中央 `FORMULA` 视图；完整通用 Formula canvas 仍后置。
 - Flat/Layers 使用 Scene v2 source IDs + 同一 cursor/selection。
 - Console 从 overlay 迁入 bottom dock。
 - Problems 面板、stale banner、run list。

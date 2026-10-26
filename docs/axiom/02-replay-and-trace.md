@@ -453,7 +453,7 @@ interface ReplaySession {
 | `Enter` | 在 trace list 中打开 step |
 | `F6` | 聚焦 Replay |
 | `Esc` | 从时间轴返回画布/关闭浮层 |
-| `[` / `]` | 设置/清除 loop（后续） |
+| `[` / `]` | 清除 / 设置 loop |
 
 - 时间轴提供一个可聚焦的 `Trace` 表格作为语义等价控制；屏幕阅读器可读 `step 04 of 09, C[1,2], completed`。
 - 播放状态变化使用 `aria-live="polite"`，不要每帧播报。

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { FormulaNode, SemanticCategory } from '../formula/ast.js';
+import { useMemo, useState } from 'react';
+import type { FormulaNode, SemanticCategory } from '../../formula/ast.js';
 import {
   callNode,
   createFormulaDocument,
@@ -8,14 +8,13 @@ import {
   serializeFormulaDocument,
   slotNode,
   symbolNode,
-} from '../formula/ast.js';
+} from '../../formula/ast.js';
 import {
   formulaToPlainLatex,
   renderFormulaToHtml,
-} from '../formula/latex.js';
-import type { StoredMatrix } from '../core/matrix.js';
-import { Icon } from './Icons.js';
-import { Modal, ModalHeader } from './Modal.js';
+} from '../../formula/latex.js';
+import type { StoredMatrix } from '../../core/matrix.js';
+import { Icon } from '../../components/Icons.js';
 
 type LabTemplateId = 'matmul' | 'scale' | 'det';
 type SlotKey = 'left' | 'right';
@@ -42,10 +41,8 @@ interface PaletteSymbol {
   create: () => FormulaNode;
 }
 
-interface FormulaLabModalProps {
-  open: boolean;
+interface FormulaStudioProps {
   matrices: readonly StoredMatrix[];
-  onClose: () => void;
   onOpenInStage: (expression: string) => void;
 }
 
@@ -98,7 +95,7 @@ function LaTeX({ node, display = false }: { node: FormulaNode; display?: boolean
   );
 }
 
-export default function FormulaLabModal({ open, matrices, onClose, onOpenInStage }: FormulaLabModalProps) {
+export default function FormulaStudio({ matrices, onOpenInStage }: FormulaStudioProps) {
   const [templateId, setTemplateId] = useState<LabTemplateId>('matmul');
   const [filled, setFilled] = useState<Record<SlotKey, FormulaNode | null>>({ left: null, right: null });
   const [selected, setSelected] = useState<SlotKey | null>('left');
@@ -123,15 +120,6 @@ export default function FormulaLabModal({ open, matrices, onClose, onOpenInStage
     ],
     [matrices],
   );
-
-  useEffect(() => {
-    if (!open) return;
-    setTemplateId('matmul');
-    setFilled({ left: null, right: null });
-    setSelected('left');
-    setMessage(null);
-    setShowStructure(false);
-  }, [open]);
 
   const tree = useMemo(() => {
     const left = filled.left ?? slotNode('operand', {
@@ -191,8 +179,6 @@ export default function FormulaLabModal({ open, matrices, onClose, onOpenInStage
     return { errors: [...new Set(errors)], resultShape, expression };
   }, [filled, matrices, template]);
 
-  if (!open) return null;
-
   const dropOn = (slot: SlotKey, itemId: string): void => {
     const item = palette.find((candidate) => candidate.id === itemId);
     if (!item) return;
@@ -244,16 +230,7 @@ export default function FormulaLabModal({ open, matrices, onClose, onOpenInStage
   const plainLatex = formulaToPlainLatex(tree);
 
   return (
-    <Modal open={open} onClose={onClose} className="formula-lab-modal" labelledBy="formula-lab-title">
-      <ModalHeader
-        id="formula-lab-title"
-        eyebrow="FORMULA STRUCTURE LAB / 公式结构实验"
-        title="先把结构搭对，再让数字进来"
-        description="这是 typed AST 的第一个可见原型：符号先声明自己是矩阵、标量还是数字，槽位只接受兼容类别。拖拽只是入口，类型检查才是规则。"
-        onClose={onClose}
-      />
-
-      <div className="formula-lab-body">
+    <div className="formula-lab-body">
         <aside className="formula-lab-palette">
           <span className="micro-label">SYMBOLS / 当前项目符号</span>
           <p>点击填入当前槽位，或拖到右侧公式中。</p>
@@ -445,7 +422,6 @@ export default function FormulaLabModal({ open, matrices, onClose, onOpenInStage
             KaTeX 只负责排版；节点类别、槽位接受集合与结果形状都来自自有 AST。复杂模板（分式、求和、导数）会共用同一结构协议。
           </p>
         </aside>
-      </div>
-    </Modal>
+    </div>
   );
 }

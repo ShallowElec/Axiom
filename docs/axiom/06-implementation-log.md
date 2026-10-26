@@ -20,7 +20,7 @@
 - 左侧 46px 活动栏：Objects / Formulas / Algorithms / Runs。
 - 资源 dock 264px（1120 宽默认折叠）；中央表达式条 + Stage/Flat/Layers；右侧检查器；底部 Replay/Trace/Console/Problems dock；状态栏。
 - 无项目保存/导出/恢复入口；全局 `IN-MEMORY` 标识。
-- MatrixEditor 与 FormulaLab 保留为临时功能，并重新皮肤。
+- MatrixEditor 保留为临时功能；Formula 结构在 Phase D 已迁入中央视图。
 - 公式模板改为 Axiom 风格 `TemplateDialog`，不再打开旧画廊模态。
 - 旧 ProjectModal、旧 DebugConsole overlay、旧主壳层已在 Phase D 删除。
 
@@ -54,14 +54,15 @@
 
 ## 2. 与设计稿的差异
 
-1. **Scene v2 已进入 runtime。** schemaVersion 升到 2，并加入 scene/node 级 `sourceStepId` / `sourceValueIds`；更完整的 groups/channels/table fallback 仍需后续扩展。
-2. **Microframe 是 presentation 派生，不是内核 micro-trace。** 这与 `provenance: derived` 一致；不能当作 native 执行细节。
-3. **真正 step-level fork 未实现。** 这是有意为之：当前故事板没有 execution checkpoint；没有 fake UI。
-4. **Block composer / 旧 Ops 手册 / 旧 TemplateModal 未迁入新壳层。** 公式模板已由新 TemplateDialog 覆盖；分块组合和 Ops 作为 Phase D 资源迁移。
-5. **底部 dock 可折叠；Phase D 已加入可拖拽高度与横向分栏。** 可拆卸窗口后置。
-6. **命令面板已在 Phase D 加入。**
-7. **没有持久化。** 刷新即回到 seed session；符合批准范围。
-8. **Function run 只对带 Story 的调试函数生成可 Replay run。** 纯 artifact 函数仍在 Console 查看输出；native/synthetic frame 统一留到 Phase D。
+1. **Scene v2 已进入 runtime。** schemaVersion 升到 2，并加入 scene/node 级 `sourceStepId` / `sourceValueIds`、groups 与 a11y table fallback；channels 仍是后续扩展。
+2. **Microframe 是 presentation 派生，不是内核 micro-trace。** 这与 `provenance: derived` 一致；不能当作 native 执行细节。Formula structure 在 Phase D 已升级为中央视图。
+3. **Formula 结构编辑仍是受控模板原型，不是通用公式编辑器。**
+4. **真正 step-level fork 未实现。** 这是有意为之：当前故事板没有 execution checkpoint；没有 fake UI。
+5. **Block composer / Ops reference 已在 Phase D 迁入新壳层；公式结构已中央化。**
+6. **底部 dock 可折叠；Phase D 已加入可拖拽高度与横向分栏。** 可拆卸窗口后置。
+7. **命令面板与主操作键盘路径已在 Phase D 加入。**
+8. **没有持久化。** 刷新即回到 seed session；符合批准范围。
+9. **Function run 只对带 Story 的调试函数生成可 Replay run。** 纯 artifact 函数仍在 Console 查看输出；native/synthetic frame 统一留到执行引擎阶段。
 
 ## 3. 验证
 
@@ -73,14 +74,14 @@
   - Run `A + M` → failed run → Problems → no success state.
   - Template dialog → `det(A)` scalar run → 4 steps.
   - Console `matmul` → artifacts → OPEN REPLAY → function run.
-  - FormulaLab `A × B` → send to stage.
+  - Formula 中央视图 `A × B` → send to Stage → 9-step derived run.
   - Light/Dark; 1440×940 与 1120×760；资源栏折叠。
-- 生产 Electron 构建与启动已验证；窗口加载 Axiom、无 localStorage 写入、Run/Trace 可生成、Formula Asset 对话框可用、惰性 FormulaLab chunk 可用。
+- 生产 Electron 构建与启动已验证；窗口加载 Axiom、无 localStorage 写入、Run/Trace 可生成、Formula Asset 对话框可用、惰性 FormulaView chunk 可用。
 - 生产验证覆盖 1440×940；浏览器验证覆盖 1120×760。
 
-## 4. 下一阶段（Phase D）
+## 4. Phase D 之后的剩余
 
-- 把 Block composer、完整公式结构实验入口、更多算法资产迁入新 IA。
-- Scene v2 / source ID 全覆盖；可拖拽分栏；命令面板；可折叠 loop。
+- 完整通用公式编辑器；当前 Formula 视图仍是受控三模板原型。
+- 可拆卸调试窗口、布局 preset、自定义命令。
 - 真实 native trace、execution checkpoints、step fork；之后再接 Rust/WASM/AD/MX。
-- 文件/项目持久化作为独立阶段，不与本次 Axiom shell 混做。
+- 文件/项目持久化作为独立阶段，不与 Axiom shell 混做。

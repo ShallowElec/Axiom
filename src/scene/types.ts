@@ -62,6 +62,13 @@ export interface SceneLegendItem {
   label: string;
 }
 
+export interface SceneTableFallback {
+  nodeId: string;
+  label: string;
+  columns: string[];
+  rows: string[][];
+}
+
 export interface SceneGroup {
   id: string;
   label: string;
@@ -84,5 +91,6 @@ export interface Scene {
   a11y: {
     altText: string;
     summary: string;
+    tables?: SceneTableFallback[];
   };
 }
