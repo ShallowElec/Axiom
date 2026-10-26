@@ -66,13 +66,13 @@
 - `MatrixPanel`（Block 预览需要）
 - `Modal` / `Icons`
 
-旧 `styles.css` 仍保留部分遗留样式，因为它们服务上述临时模态；新 Axiom 主界面完全走 `src/axiom/theme.css`。
+旧 `styles.css` 已裁剪为 `src/legacy-tools.css`（约 38KB），只保留 MatrixEditor、BlockModal、FormulaLab 及其共享 modal 控件所需段；新 Axiom 主界面完全走 `src/axiom/theme.css`。
 
 ## 2. 验证
 
 - `npm run typecheck`：通过。
 - `npm test`：103 项通过（core 41、debug 19、formula 31、scene/runtime 7、architecture 5）。
-- `npm run build`：通过。
+- `npm run build`：通过；CSS 从旧 212.9 KB 裁到 138.8 KB（gzip 36.9 → 23.1 KB），保留的临时模态仍通过生产截图检查。
 - 手工验证：
   - Cmd/Ctrl+K → search/select/execute/Esc。
   - 拖动 resource/inspector/dock；1120 下中央工作区不被压穿。
@@ -83,7 +83,7 @@
 
 ## 3. 后置项
 
-- 旧 `styles.css` 的逐段裁剪（等临时 MatrixEditor/FormulaLab 迁入新组件后）。
+- 临时 MatrixEditor / FormulaLab 重做后，删除 `src/legacy-tools.css` 的最后残留。
 - 完整中央 FormulaLab view、Scene v2 groups/channels/table fallback。
 - 真实 step checkpoint/fork、native trace、WASM/AD/MX。
 - 可拆卸窗口、布局 preset、命令面板自定义命令。
