@@ -8,6 +8,7 @@ interface CommandBarProps {
   onToggleTheme: () => void;
   onRun: () => void;
   onOpenRuns: () => void;
+  onOpenCommands: () => void;
 }
 
 const runLabel = (run: RunRecord | null): string => {
@@ -17,7 +18,7 @@ const runLabel = (run: RunRecord | null): string => {
   return 'READY';
 };
 
-export default function CommandBar({ run, stale, theme, onToggleTheme, onRun, onOpenRuns }: CommandBarProps) {
+export default function CommandBar({ run, stale, theme, onToggleTheme, onRun, onOpenRuns, onOpenCommands }: CommandBarProps) {
   return (
     <header className="ax-commandbar">
       <div className="ax-command-left">
@@ -38,6 +39,11 @@ export default function CommandBar({ run, stale, theme, onToggleTheme, onRun, on
           <span>{run?.id ?? 'NO RUN'}</span><kbd>RUNS</kbd>
         </button>
         <span className="ax-command-center-sep" />
+        <button type="button" className="ax-command-search" onClick={onOpenCommands} title="Open command palette (⌘K / Ctrl+K)">
+          <Icon name="compass" size={12} strokeWidth={1.5} />
+          <span>SEARCH COMMANDS</span>
+          <kbd>⌘K</kbd>
+        </button>
         <span className="ax-run-state">
           <span className={`ax-chip ${stale ? 'hatch' : run ? 'sky' : ''}`}>{stale ? 'STALE' : runLabel(run)}</span>
           {run && <><strong>{run.steps.length}</strong> STEPS · {run.provenance === 'derived' ? 'DERIVED' : 'NATIVE'}</>}

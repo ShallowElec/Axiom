@@ -7,10 +7,12 @@ import type { FormulaTemplate } from './content/library.js';
 import type { Story } from './presentation/storyTypes.js';
 import { createSeedDocument, WorkbenchStore } from './runtime/workbench-store.js';
 import { analyzeObjectsExpression, analyzeWorkbenchDocument } from './runtime/document.js';
-import type { MatrixDraft, ToastMessage } from './workspace/types.js';
+import type { BlockBuildPayload, MatrixDraft, ToastMessage } from './workspace/types.js';
 import ActivityRail from './axiom/components/ActivityRail.js';
 import type { ResourceMode } from './axiom/components/ActivityRail.js';
 import CommandBar from './axiom/components/CommandBar.js';
+import CommandPalette from './axiom/components/CommandPalette.js';
+import type { CommandAction } from './axiom/components/CommandPalette.js';
 import ExpressionStrip from './axiom/components/ExpressionStrip.js';
 import FlatView from './axiom/components/FlatView.js';
 import Inspector from './axiom/components/Inspector.js';
@@ -19,10 +21,13 @@ import ReplayDock from './axiom/components/ReplayDock.js';
 import type { DockTab } from './axiom/components/ReplayDock.js';
 import ResourceDock from './axiom/components/ResourceDock.js';
 import StageView from './axiom/components/StageView.js';
+import SplitHandle from './axiom/components/SplitHandle.js';
+import SyntaxDialog from './axiom/components/SyntaxDialog.js';
 import StatusBar from './axiom/components/StatusBar.js';
 import TemplateDialog from './axiom/components/TemplateDialog.js';
 import { useWorkbench } from './axiom/useWorkbench.js';
 import { draftToStored, nextMatrixName, replaceIdentifier, withShape } from './axiom/matrix-utils.js';
+import BlockModal from './components/BlockModal.js';
 import MatrixEditorModal from './components/MatrixEditorModal.js';
 import { Icon } from './components/Icons.js';
 
@@ -56,8 +61,14 @@ export default function AxiomApp() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [resourceMode, setResourceMode] = useState<ResourceMode>('objects');
   const [resourceOpen, setResourceOpen] = useState(() => window.innerWidth >= 1280);
+  const [layout, setLayout] = useState(() => ({
+    resource: window.innerWidth < 1280 ? 232 : 264,
+    inspector: window.innerWidth < 1280 ? 286 : 320,
+    dock: window.innerHeight < 820 ? 210 : 236,
+  }));
   const [view, setView] = useState<ViewMode>('stage');
   const [dockOpen, setDockOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab>('replay');
   const [consoleFunctionId, setConsoleFunctionId] = useState(DEBUG_FUNCTIONS[0]?.id ?? 'matmul');
   const scene = step && run
@@ -66,13 +77,15 @@ export default function AxiomApp() {
   const [editor, setEditor] = useState<EditorState>({ open: false, matrix: null });
   const [template, setTemplate] = useState<FormulaTemplate | null>(null);
   const [formulaLabOpen, setFormulaLabOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [syntaxOpen, setSyntaxOpen] = useState(false);
   const [storedRunId, setStoredRunId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   const analysis = useMemo(() => analyzeWorkbenchDocument(workbenchDocument), [workbenchDocument]);
   const suggestedName = useMemo(() => nextMatrixName(workbenchDocument.objects), [workbenchDocument.objects]);
-  const modalOpen = editor.open || template !== null || formulaLabOpen;
+  const modalOpen = editor.open || template !== null || formulaLabOpen || commandOpen || blockOpen || syntaxOpen;
 
   const showToast = useCallback((message: string, type: 'info' | 'error' = 'info'): void => {
     setToast({ message, type, id: Date.now() });
@@ -84,6 +97,28 @@ export default function AxiomApp() {
     document.documentElement.dataset.theme = theme;
     document.title = 'Axiom · Computational Workbench';
   }, [theme]);
+
+  useEffect(() => {
+    const clampLayout = (): void => {
+      setLayout((current) => {
+        const available = window.innerWidth - 46;
+        const inspector = Math.min(
+          current.inspector,
+          Math.max(270, Math.min(380, available - (resourceOpen ? current.resource : 0) - 500)),
+        );
+        const resource = Math.min(
+          current.resource,
+          Math.max(220, Math.min(320, available - inspector - 500)),
+        );
+        const dock = Math.min(current.dock, Math.max(140, window.innerHeight - 44 - 22 - 300));
+        if (inspector === current.inspector && resource === current.resource && dock === current.dock) return current;
+        return { resource, inspector, dock };
+      });
+    };
+    clampLayout();
+    window.addEventListener('resize', clampLayout);
+    return () => window.removeEventListener('resize', clampLayout);
+  }, [resourceOpen]);
 
   useEffect(() => () => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
@@ -221,6 +256,23 @@ export default function AxiomApp() {
     showToast('Function trace opened as a function run.');
   };
 
+  const handleBlockBuild = (payload: BlockBuildPayload): void => {
+    const run = store.runBlock(payload, {
+      autoPlay: !prefersReducedMotion(),
+      storyOptions: {
+        template: {
+          title: `分块组合 · ${payload.name}`,
+          eyebrow: 'BLOCK COMPOSER',
+          description: '逐格把已有矩阵搬入新的全局坐标。',
+        },
+      },
+    });
+    setBlockOpen(false);
+    setView('stage');
+    openReplay('replay');
+    showToast(`Block matrix ${run.summary.title.replace('分块组合 · ', '')} created; the composer run is inspectable.`);
+  };
+
   const handleStoreResult = (): void => {
     const result = run?.resultValue;
     if (!result || result.kind !== 'matrix') {
@@ -246,6 +298,25 @@ export default function AxiomApp() {
     handleRun();
   };
 
+  const commands: CommandAction[] = [
+    { id: 'run', group: 'RUN', label: 'Run current expression', detail: 'Create a new immutable run', shortcut: 'F5', icon: 'play', run: handleRun },
+    { id: 'runs', group: 'RUN', label: 'Open run history', detail: `${runs.length} in-memory runs`, shortcut: 'RUNS', icon: 'table', run: () => { setResourceMode('runs'); setResourceOpen(true); } },
+    { id: 'stage', group: 'VIEW', label: 'Switch to Stage', detail: '2D execution canvas', shortcut: '1', icon: 'grid', run: () => setView('stage') },
+    { id: 'flat', group: 'VIEW', label: 'Switch to Flat', detail: 'Tiled synthesis view', shortcut: '2', icon: 'table', run: () => setView('flat') },
+    { id: 'layers', group: 'VIEW', label: 'Switch to Layers', detail: 'Execution layer stack', shortcut: '3', icon: 'layers', run: () => setView('layers') },
+    { id: 'objects', group: 'RESOURCE', label: 'Open Objects', detail: 'Session matrices and vectors', icon: 'grid', run: () => { setResourceMode('objects'); setResourceOpen(true); } },
+    { id: 'formulas', group: 'RESOURCE', label: 'Open Formulas', detail: 'Formula assets', icon: 'template', run: () => { setResourceMode('formulas'); setResourceOpen(true); } },
+    { id: 'algorithms', group: 'RESOURCE', label: 'Open Algorithms', detail: 'Registered functions and algorithms', icon: 'function', run: () => { setResourceMode('algorithms'); setResourceOpen(true); } },
+    { id: 'console', group: 'DEBUG', label: 'Open Console', detail: 'Run a registered function', shortcut: 'CONSOLE', icon: 'terminal', run: handleOpenConsole },
+    { id: 'new-matrix', group: 'EDIT', label: 'New matrix', detail: 'Open the matrix editor', icon: 'plus', run: openNewMatrix },
+    { id: 'formula-lab', group: 'FORMULA', label: 'Open Formula Structure Lab', detail: 'Typed AST slot prototype', icon: 'spark', run: () => setFormulaLabOpen(true) },
+    { id: 'block', group: 'EDIT', label: 'Open Block Composer', detail: 'Compose a matrix from blocks', icon: 'grid', run: () => setBlockOpen(true) },
+    { id: 'syntax', group: 'REFERENCE', label: 'Open expression syntax', detail: 'Operations, examples and exact-Q notes', icon: 'book', run: () => setSyntaxOpen(true) },
+    { id: 'theme', group: 'UI', label: `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`, detail: 'Theme is session-only', icon: theme === 'light' ? 'moon' : 'sun', run: () => setTheme((current) => current === 'light' ? 'dark' : 'light') },
+    { id: 'resource-toggle', group: 'UI', label: resourceOpen ? 'Collapse resource dock' : 'Expand resource dock', detail: 'Panel state is in-memory', icon: 'panel', run: () => setResourceOpen((open) => !open) },
+    { id: 'dock-toggle', group: 'UI', label: dockOpen ? 'Collapse replay dock' : 'Expand replay dock', detail: 'Timeline / trace / console', icon: 'terminal', run: () => setDockOpen((open) => !open) },
+  ];
+
   const toggleResource = (mode: ResourceMode): void => {
     if (mode === resourceMode && resourceOpen) {
       setResourceOpen(false);
@@ -259,6 +330,12 @@ export default function AxiomApp() {
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement | null;
       const typing = Boolean(target?.closest('input, textarea, select, button, [contenteditable="true"]'));
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (commandOpen) setCommandOpen(false);
+        else if (!modalOpen) setCommandOpen(true);
+        return;
+      }
       if (event.key === 'F5') {
         event.preventDefault();
         if (!modalOpen) handleRun();
@@ -297,7 +374,7 @@ export default function AxiomApp() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleRun, modalOpen, replay.detail, replay.status, run, store]);
+  }, [commandOpen, handleRun, modalOpen, replay.detail, replay.status, run, store]);
 
   const resourceCounts = {
     objects: workbenchDocument.objects.length,
@@ -305,6 +382,10 @@ export default function AxiomApp() {
     algorithms: DEBUG_FUNCTIONS.length,
     runs: runs.length,
   };
+
+  const availableWidth = window.innerWidth - 46;
+  const maxInspector = Math.max(270, Math.min(380, availableWidth - (resourceOpen ? layout.resource : 0) - 500));
+  const maxResource = Math.max(220, Math.min(320, availableWidth - layout.inspector - 500));
 
   return (
     <div className={`ax-app ax-platform-${window.desktop?.platform || 'web'}`}>
@@ -314,6 +395,7 @@ export default function AxiomApp() {
         theme={theme}
         onToggleTheme={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
         onRun={handleRun}
+        onOpenCommands={() => setCommandOpen(true)}
         onOpenRuns={() => {
           setResourceMode('runs');
           setResourceOpen(true);
@@ -329,7 +411,48 @@ export default function AxiomApp() {
           onToggleResource={() => setResourceOpen((open) => !open)}
         />
 
-        <div className={`ax-workspace-main ${resourceOpen ? '' : 'resource-closed'} ${dockOpen ? '' : 'dock-closed'}`}>
+        <div
+          className={`ax-workspace-main ${resourceOpen ? '' : 'resource-closed'} ${dockOpen ? '' : 'dock-closed'}`}
+          style={{
+            '--ax-resource-width': `${layout.resource}px`,
+            '--ax-inspector-width': `${layout.inspector}px`,
+            '--ax-dock-height': dockOpen ? `${layout.dock}px` : '30px',
+          } as React.CSSProperties}
+        >
+          {resourceOpen && (
+            <SplitHandle
+              direction="x"
+              value={layout.resource}
+              min={220}
+              max={maxResource}
+              className="ax-split-resource"
+              label="Resize resource dock"
+              onChange={(resource) => setLayout((current) => ({ ...current, resource }))}
+            />
+          )}
+          <SplitHandle
+            direction="x"
+            value={layout.inspector}
+            min={270}
+            max={maxInspector}
+            invert
+            className="ax-split-inspector"
+            label="Resize inspector"
+            onChange={(inspector) => setLayout((current) => ({ ...current, inspector }))}
+          />
+          {dockOpen && (
+            <SplitHandle
+              direction="y"
+              value={layout.dock}
+              min={140}
+              max={360}
+              invert
+              className="ax-split-dock"
+              label="Resize replay dock"
+              onChange={(dock) => setLayout((current) => ({ ...current, dock }))}
+            />
+          )}
+
           <ResourceDock
             mode={resourceMode}
             objects={workbenchDocument.objects}
@@ -338,12 +461,14 @@ export default function AxiomApp() {
             runs={runs}
             activeRunId={activeRunId}
             onCreateMatrix={openNewMatrix}
+            onOpenBlock={() => setBlockOpen(true)}
             onEditMatrix={openEditMatrix}
             onInsertMatrix={handleInsertMatrix}
             onOpenFormula={(nextTemplate) => setTemplate(nextTemplate)}
             onOpenFormulaLab={() => setFormulaLabOpen(true)}
             onOpenAlgorithm={handleOpenAlgorithm}
             onOpenConsole={handleOpenConsole}
+            onOpenSyntax={() => setSyntaxOpen(true)}
             onOpenRun={(runId) => {
               store.openRun(runId);
               openReplay('replay');
@@ -509,6 +634,16 @@ export default function AxiomApp() {
         onLaunch={handleLaunchTemplate}
       />
 
+      <BlockModal
+        open={blockOpen}
+        matrices={workbenchDocument.objects}
+        nameSuggestion={nextMatrixName(workbenchDocument.objects)}
+        onClose={() => setBlockOpen(false)}
+        onBuild={handleBlockBuild}
+      />
+
+      <SyntaxDialog open={syntaxOpen} onClose={() => setSyntaxOpen(false)} />
+
       {formulaLabOpen && (
         <Suspense fallback={<div className="ax-formula-loading">LOADING STRUCTURE LAB…</div>}>
           <FormulaLabModal
@@ -529,6 +664,8 @@ export default function AxiomApp() {
           />
         </Suspense>
       )}
+
+      <CommandPalette open={commandOpen} actions={commands} onClose={() => setCommandOpen(false)} />
 
       {toast && (
         <div className={`ax-toast ${toast.type}`}>

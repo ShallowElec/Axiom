@@ -53,6 +53,12 @@ describe('architecture boundaries', () => {
     expect(app).not.toMatch(/localStorage|indexedDB|sessionStorage/);
     expect(app).toMatch(/WorkbenchStore/);
     expect(app).toMatch(/StageView/);
+    expect(app).toMatch(/CommandPalette/);
+    expect(app).toMatch(/SplitHandle/);
+    expect(app).toMatch(/BlockModal/);
+    expect(app).toMatch(/SyntaxDialog/);
+    expect(() => source('src/App.tsx')).toThrow();
+    expect(() => source('src/workspace/project.ts')).toThrow();
   });
 
   it('keeps runtime execution free of React and persistence', () => {

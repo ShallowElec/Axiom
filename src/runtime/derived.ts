@@ -173,6 +173,7 @@ export function buildRunFromStory(story: Story, options: import('./types.js').Bu
     const layeredScene = buildStoryScene(story, beat, 'layered');
     const valueByLabel = new Map(panels.map((panel) => [panel.label, panel.valueId]));
     for (const scene of [flatScene, layeredScene]) {
+      scene.sourceStepId = stepId;
       for (const node of scene.nodes) {
         node.sourceStepId = stepId;
         const valueId = valueByLabel.get(node.label);

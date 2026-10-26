@@ -1,6 +1,6 @@
 # Axiom · 设计重构包
 
-> **状态：PHASE B + C 已实施；Phase D 后置。**
+> **状态：PHASE B + C + D 已实施；后续为 runtime/engine 阶段。**
 > **基准日期：** 2026-10-26
 > **品牌：** Axiom（英文主品牌；中文正文可称“公理”）
 > **本阶段目标：** 在不重写现有精确矩阵内核的前提下，把“矩阵工坊”重构为工程仪器感的 Axiom 工作台，并建立可检查的 Run / Replay 闭环。
@@ -41,6 +41,7 @@
 | [04-delivery-plan.md](04-delivery-plan.md) | 分阶段实施、文件迁移、验收门槛、非目标、风险 |
 | [05-approval-checklist.md](05-approval-checklist.md) | 已批准的设计范围与决策记录 |
 | [06-implementation-log.md](06-implementation-log.md) | Phase B + C 已落地内容、偏差、验证和后置项 |
+| [07-phase-d-log.md](07-phase-d-log.md) | Phase D：命令面板、分栏、Block、Syntax、Scene v2、旧壳清理 |
 | [reference/COLOR_CARD.md](reference/COLOR_CARD.md) | 原始色卡（逐字保留） |
 | [reference/EP01_color_card.png](reference/EP01_color_card.png) | 色卡样张 |
 | [reference/math_workbench_design_v1.1.md](reference/math_workbench_design_v1.1.md) | 你提供的新架构与 UI 设计稿 v1.1（逐字保留） |
@@ -71,13 +72,14 @@
 
 ## 5. 实施状态
 
-- 已按批准进入 Phase B + C；实现记录见 [06-implementation-log.md](06-implementation-log.md)。
+- Phase B + C 已实施：[06-implementation-log.md](06-implementation-log.md)。
+- Phase D 已实施：[07-phase-d-log.md](07-phase-d-log.md)。
 - 本轮未做持久化、真 step fork、native trace、WASM/AD/MX；这些仍是后续阶段。
-- 旧主壳层仍留在源码中但未挂载；Phase D 清理/迁移。
+- 旧主壳层文件已删除；旧 CSS 仅保留给临时 MatrixEditor/Block/FormulaLab 使用。
 
 ## 6. 评审方式
 
 - 设计已于 2026-10-26 批准（[05-approval-checklist.md](05-approval-checklist.md)）。
-- Phase B + C 已实施；下方长期目标仍是后续阶段。
+- Phase B + C + D 已实施；下方长期目标仍是后续阶段。
 
 > 参考设计稿中的 Rust/WASM、SQLite、完整 AD、多窗口等长期目标仍然有效，但它们是 **后续阶段**；本包把它们从第一刀中显式剥离，避免一次重构失焦。

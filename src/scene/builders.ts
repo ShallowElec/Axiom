@@ -181,7 +181,7 @@ function buildLayered(story: Story, beat: FlatBeat): Scene {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `scene-layered-${story.id}-${beat.id}`,
     space: 'layered',
     title: story.title,
@@ -242,7 +242,7 @@ function buildFlat(story: Story, beat: FlatBeat): Scene {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `scene-flat-${story.id}-${beat.id}`,
     space: 'flat',
     title: beat.title,
@@ -321,7 +321,7 @@ export function buildDebugScene(
     outputIds.forEach((id) => edges.push({ id: `${id}-output`, from: opIds[opIds.length - 1]!, to: id, kind: 'data' }));
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `debug-scene-${traceRef}`,
     space: 'layered',
     title,

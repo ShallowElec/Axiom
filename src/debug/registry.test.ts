@@ -24,7 +24,7 @@ describe('debug function registry', () => {
       expect(result.trace.status).toBe('ok');
       expect(result.trace.outputs.length).toBeGreaterThan(0);
       expect(result.scenes.length).toBeGreaterThan(0);
-      expect(result.scenes[0]?.schemaVersion).toBe(1);
+      expect(result.scenes[0]?.schemaVersion).toBe(2);
       for (const scene of result.scenes) {
         expect(scene.nodes.length).toBeGreaterThan(0);
         expect(scene.a11y.altText.length).toBeGreaterThan(0);

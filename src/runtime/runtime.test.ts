@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { libraryFrom } from '../content/library.js';
+import { concatBlocks, matrixFromRows } from '../core/matrix.js';
 import { buildStoryFromExpression } from '../presentation/stories.js';
 import { createSeedDocument, WorkbenchStore } from './workbench-store.js';
 import type { RunRecord, StoryRunner } from './types.js';
@@ -27,6 +28,8 @@ describe('Axiom workbench runtime', () => {
     expect(Object.keys(run.frames).length).toBe(run.steps.length);
     expect(run.scenes[run.steps[0]!.id]?.flat.space).toBe('flat');
     expect(run.scenes[run.steps[0]!.id]?.layered.space).toBe('layered');
+    expect(run.scenes[run.steps[0]!.id]?.flat.schemaVersion).toBe(2);
+    expect(run.scenes[run.steps[0]!.id]?.flat.sourceStepId).toBe(run.steps[0]!.id);
     expect(run.scenes[run.steps[0]!.id]?.flat.nodes.every((node) => node.sourceStepId === run.steps[0]!.id)).toBe(true);
     for (const step of run.steps) {
       expect(step.microframeIds.length).toBeGreaterThan(0);
@@ -94,6 +97,19 @@ describe('Axiom workbench runtime', () => {
     const replaying = store.getSnapshot().replay;
     expect(replaying.stepIndex).toBe(0);
     expect(replaying.status).toBe('playing');
+  });
+
+  it('runs a block composition through the same runtime and adds its matrix to the session', () => {
+    const { store } = makeStore();
+    const A = matrixFromRows([[1, 2], [3, 4]], 'A');
+    const B = matrixFromRows([[5], [6]], 'B');
+    const built = concatBlocks([[A, B]]);
+    const run = store.runBlock({ name: 'K', grid: [[A, B]], built, rows: 1, cols: 2 }, { autoPlay: false });
+    expect(run.kind).toBe('expression');
+    expect(run.steps.length).toBeGreaterThan(0);
+    expect(store.getSnapshot().document.expression).toBe('K');
+    expect(store.getSnapshot().document.objects.some((matrix) => matrix.name === 'K')).toBe(true);
+    expect(store.stale()).toBe(false);
   });
 
   it('auto-plays a new run by default and can loop', () => {

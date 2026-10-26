@@ -22,7 +22,7 @@
 - 无项目保存/导出/恢复入口；全局 `IN-MEMORY` 标识。
 - MatrixEditor 与 FormulaLab 保留为临时功能，并重新皮肤。
 - 公式模板改为 Axiom 风格 `TemplateDialog`，不再打开旧画廊模态。
-- 旧 ProjectModal、旧 DebugConsole overlay、旧主壳层未挂载。
+- 旧 ProjectModal、旧 DebugConsole overlay、旧主壳层已在 Phase D 删除。
 
 ### Runtime / Trace
 
@@ -54,12 +54,12 @@
 
 ## 2. 与设计稿的差异
 
-1. **Scene 仍为 v1 schema。** 已增加 source IDs，但没有正式升到 Scene v2；完整 Scene v2 在 Phase D。
+1. **Scene v2 已进入 runtime。** schemaVersion 升到 2，并加入 scene/node 级 `sourceStepId` / `sourceValueIds`；更完整的 groups/channels/table fallback 仍需后续扩展。
 2. **Microframe 是 presentation 派生，不是内核 micro-trace。** 这与 `provenance: derived` 一致；不能当作 native 执行细节。
 3. **真正 step-level fork 未实现。** 这是有意为之：当前故事板没有 execution checkpoint；没有 fake UI。
 4. **Block composer / 旧 Ops 手册 / 旧 TemplateModal 未迁入新壳层。** 公式模板已由新 TemplateDialog 覆盖；分块组合和 Ops 作为 Phase D 资源迁移。
-5. **底部 dock 可折叠但不支持拖拽高度。** 可调分栏与可拆卸窗口后置。
-6. **没有命令面板。** 快捷键基础（F5、Space、方向键、Home/End）已落地；Ctrl/Cmd+K 后置。
+5. **底部 dock 可折叠；Phase D 已加入可拖拽高度与横向分栏。** 可拆卸窗口后置。
+6. **命令面板已在 Phase D 加入。**
 7. **没有持久化。** 刷新即回到 seed session；符合批准范围。
 8. **Function run 只对带 Story 的调试函数生成可 Replay run。** 纯 artifact 函数仍在 Console 查看输出；native/synthetic frame 统一留到 Phase D。
 
@@ -67,7 +67,7 @@
 
 - `npm run typecheck`：通过。
 - `npm run build`：Vite + Electron 构建通过。
-- `npm test`：102 项通过（core 41、debug 19、formula 31、scene/runtime 6、architecture 5）。
+- `npm test`：Phase D 后 103 项通过。
 - 手工 E2E：
   - Run `A × B` → 9 steps → pause/seek/step/micro → view switch → cell select → stale → new run.
   - Run `A + M` → failed run → Problems → no success state.

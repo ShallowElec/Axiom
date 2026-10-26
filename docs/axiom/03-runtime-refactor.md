@@ -1,6 +1,6 @@
 # 03 · Runtime / IR 重构与现有代码映射
 
-> 状态：已批准；Phase B + C 已按此基线实施。
+> 状态：已批准；Phase B + C + D 已按此基线实施。
 > 目标：第一刀把当前“表达式 → 故事板 → UI 一条长链”拆成 **Document → Run/Trace → Presentation → Replay → Renderer**，但保留现有精确矩阵内核与操作语义，不先重写 Rust/WASM。
 
 ## 1. 当前代码审计
@@ -11,7 +11,7 @@
 - `src/presentation` 能编译出细腻的教学故事板；`src/scene` + `src/renderers/scene` 已证明同一故事可以投射到 2D/层叠/平铺。
 - `src/debug` 有独立函数注册表、trace 雏形、调试控制台。
 - `src/formula` 有 headless typed AST、KaTeX 渲染、槽位与安全测试。
-- 102 项测试通过，严格 TypeScript；这些资产必须保留。
+- 103 项测试通过，严格 TypeScript；这些资产必须保留。
 
 ### 1.2 当前的结构性问题
 
@@ -243,7 +243,7 @@ interface WorkbenchDocument {
 
 ### 5.3 Presentation
 
-- Scene v1 已有渲染器和边界；第一刀升级为 v2，增加 `runId`、`sourceStepId`、`sourceValueId`、`sourceMicroframeIds`。
+- Scene 已在 Phase D 升为 schemaVersion 2；增加 scene/node 级 `sourceStepId`、`sourceValueIds`，SceneGroup 类型已落位；更细的 microframe 关联与 groups 仍待扩展。
 - 每个 SceneNode / Edge 必须能反查到 step/value；否则检查器只能猜。
 - Microframes 归 PresentationDocument；不能写回 ValueSnapshot。
 - Scene 的视图差异（Stage/Flat/Layers）是 projection，不是三份数学结果。
@@ -329,7 +329,7 @@ RunRecord + ReplayCursor + Selection
 
 ### 9.1 必保留
 
-- 现有 102 项 core/formula/debug/architecture 测试通过。
+- 现有 103 项 core/formula/debug/architecture 测试通过。
 - 当前矩阵值、shape、story 计算不回归。
 
 ### 9.2 新增

@@ -2,7 +2,7 @@
 
 Axiom 是一套本地优先、可检查执行过程的数学工作台。它把矩阵与公式变成**不可变的运行记录**：一次计算可以被运行、暂停、逐步骤检查、切到平铺/层叠视图重播，而重播本身不会再次执行数学。
 
-当前版本是 **Phase B + C 的第一刀**：Axiom 工程壳层 + 现有精确 Q 引擎上的 Run / Trace / Replay 闭环。设计冻结记录见 [docs/axiom](docs/axiom/README.md)。
+当前版本是 **Phase B + C + D**：Axiom 工程壳层、Run / Trace / Replay 闭环，以及命令面板、可拖拽分栏、Block Composer、Syntax reference 与 Scene v2 source IDs。设计冻结记录见 [docs/axiom](docs/axiom/README.md)。
 
 ![Axiom 主工作台](screenshots/axiom-main.jpg)
 
@@ -14,6 +14,8 @@ Axiom 是一套本地优先、可检查执行过程的数学工作台。它把�
 - Light 为默认主题，可切换深色；深色是近黑底 + 白字 + 亮蓝，不再使用旧奶油/青柠/珊瑚。
 - 活动栏 + 资源 dock + 中央表达式/视图 + 检查器 + 底部 Replay dock + 状态栏。
 - 资源：Objects / Formulas / Algorithms / Runs。
+- **命令面板**：`⌘/Ctrl+K` 搜索 Run、视图切换、资源、Console、Block Composer、Syntax、主题与布局动作。
+- **可拖拽分栏**：资源栏、检查器和底部 Replay dock 都可调整尺寸，且会保护中央画布的最小宽度。
 - **没有持久化。** 所有矩阵、运行、重播状态都只在当前 session；应用状态栏和顶栏持续显示 `IN-MEMORY`。刷新后回到 seed session，这是本阶段的明确设计，不是缺陷。
 
 ### Run / Trace / Replay
@@ -34,10 +36,11 @@ Axiom 是一套本地优先、可检查执行过程的数学工作台。它把�
 - 精确有理数矩阵内核（BigInt/Q），支持 1×1 到 10×10 矩阵，整数、小数、分数。
 - 表达式：`+ − × ÷ ^`、`⊙`、`⊗`、转置、`det / inv / rank / trace / rref / adj / solve / minor`；复合表达式自动拆解。
 - 11 条公式模板，经新的 Axiom Formula Asset 对话框装填；不再打开旧的画廊模态。
-- 分块组合、旧 ops 手册仍在旧实现中，Phase D 再迁入新资源架。
+- Block Composer 与表达式 Syntax reference 已迁入新 Axiom IA。
 - 2D Stage、Flat 平铺、Layers 执行层叠共享同一份 Scene + 同一 cursor/selection。
 - 矩阵 cell 使用天蓝/黑/白语义高亮；没有第三色相。
 - Inspector 展示 shape、dtype、value、source step、provenance、microframes；结果矩阵可存回当前 session。
+- Scene `schemaVersion: 2`，scene/node 带 `sourceStepId` / `sourceValueIds`，供视图与检查器反查。
 
 ![平铺视图](screenshots/axiom-flat.jpg)
 
@@ -52,11 +55,24 @@ Axiom 是一套本地优先、可检查执行过程的数学工作台。它把�
 
 ![Console](screenshots/axiom-console.jpg)
 
+### 工作台工具
+
+- **命令面板**：`⌘/Ctrl+K`，支持搜索、键盘选择、执行；没有隐藏的控制台命令。
+- **Block Composer**：从 Objects 资源或命令面板打开；横排、竖排、2×2、自定义布局，检查块边界后生成组合矩阵，并直接创建可重播的 derived run。
+- **Syntax reference**：从 Algorithms 资源或命令面板打开；按分组浏览表达式语法、说明和 examples。它和执行器分离，不伪装成算法运行。
+- **可拖拽分栏**：resource dock / inspector / replay dock 均可拖拽调整，布局只在内存。
+
+![命令面板](screenshots/axiom-command.jpg)
+
+![Block Composer](screenshots/axiom-block.jpg)
+
+![表达式语法参考](screenshots/axiom-syntax.jpg)
+
 ### 公式资产与结构实验
 
 - 公式模板装填：Axiom 风格的 Formula Asset 对话框，验证 shape 约束后创建新 run。
 - 保留临时 FormulaLab：typed AST / KaTeX / 槽位吸附 / 结构预览；完整公式编辑器仍后置。
-- 保留临时 MatrixEditor：矩阵编辑仍可完成，Phase D 再完全重做。
+- 保留临时 MatrixEditor：矩阵编辑仍可完成，完整重做留给后续。
 
 ![公式装填](screenshots/axiom-formula.jpg)
 
@@ -91,6 +107,7 @@ MATRIX_NO_SANDBOX=1 npm start
 
 | 键 | 动作 |
 |---|---|
+| `⌘/Ctrl + K` | 打开命令面板 |
 | `F5` | 运行当前表达式 |
 | `Space` | 播放 / 暂停重播 |
 | `←` / `→` | 上一/下一 step（Micro 模式下为 microframe） |
@@ -139,24 +156,28 @@ src/
   core/                         exact rational 内核、表达式、operations
   presentation/                 现有 Story 编译器（供 derived adapter 使用）
   scene/                        renderer-neutral Scene
-  debug/                        算法注册表 + 旧调试实现（新 Console 仍使用 registry）
+  debug/                        算法注册表 + 函数调试数据模型（新 Console 使用）
   formula/                      headless formula AST / KaTeX / palette
   components/                   保留的临时 MatrixEditor / FormulaLab
   content/                      示例矩阵与公式模板
-  workspace/                    旧项目存储（新 Axiom 未挂载）
-docs/axiom/                     Phase B+C 设计、重播契约、实施记录
+  workspace/                    共享编辑器 payload 类型；旧项目存储已移除
+docs/axiom/                     Phase B+C+D 设计、重播契约、实施记录
 ```
 
 ## 验证
 
 - `npm run typecheck`：通过
-- `npm test`：**102 项通过**
+- `npm test`：**103 项通过**
 - `npm run build`：Vite + Electron 构建通过
 - 已手工验证：
   - Run `A × B` → pause / seek / step / micro / flat / layers / cell selection
   - edit → stale → new run
   - determinant template → scalar run
   - Console `matmul` → artifacts → function run
+  - Block Composer → 3×4 matrix → 13-step derived run
+  - Command palette search/select/execute/Escape
+  - Syntax reference search and examples
+  - drag resource / inspector / replay dock; 1120×760 re-clamp
   - FormulaLab → send to stage
   - Light / Dark；1440×940 与 1120×760；资源栏折叠
   - failed expression → Problems；没有成功态或结果假象
@@ -172,13 +193,14 @@ docs/axiom/                     Phase B+C 设计、重播契约、实施记录
 - [Runtime/IR 重构](docs/axiom/03-runtime-refactor.md)
 - [实施计划](docs/axiom/04-delivery-plan.md)
 - [Phase B + C 实施记录](docs/axiom/06-implementation-log.md)
+- [Phase D 实施记录](docs/axiom/07-phase-d-log.md)
 
 ## 本阶段明确后置
 
 - 持久化：项目文件、保存/恢复、导出、旧数据迁移。
 - 真正的 step checkpoint / fork。
 - native kernel trace、Rust/WASM 核心、AD/VJP、MX/FP4–FP64 精度实验室。
-- 完整 typed formula editor、Block Composer / Ops 手册的新 IA 迁移。
-- Scene v2、可拖拽分栏、命令面板、可分离调试窗口。
+- 完整 typed formula editor、公式结构实验的中央化。
+- 完整 Scene v2 groups/channels/table fallback、可分离调试窗口。
 
-> 目标是先把“运行、检查、重播”做成真实的产品能力，再扩大数学域与执行后端；不把尚未实现的 native/fork/持久化能力做成假入口。
+> 目标仍是先把“运行、检查、重播、组合”做成真实的产品能力，再扩大数学域与执行后端；不把尚未实现的 native/fork/持久化能力做成假入口。

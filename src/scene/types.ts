@@ -62,13 +62,22 @@ export interface SceneLegendItem {
   label: string;
 }
 
+export interface SceneGroup {
+  id: string;
+  label: string;
+  kind: 'chapter' | 'phase' | 'loop';
+  nodeIds: string[];
+}
+
 export interface Scene {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   space: SceneSpace;
   title: string;
   description: string;
   traceRef: string;
+  sourceStepId?: string;
+  groups?: SceneGroup[];
   nodes: SceneNode[];
   edges: SceneEdge[];
   legend: SceneLegendItem[];

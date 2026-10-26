@@ -1,6 +1,7 @@
 import { libraryFrom, seedObjects } from '../content/library.js';
-import { buildStoryFromExpression } from '../presentation/stories.js';
+import { buildBlockStory, buildStoryFromExpression } from '../presentation/stories.js';
 import type { Story } from '../presentation/storyTypes.js';
+import type { BlockBuildPayload } from '../workspace/types.js';
 import { analyzeObjectsExpression } from './document.js';
 import { buildRunFromStory, createFailedRun } from './derived.js';
 import type {
@@ -356,6 +357,42 @@ export class WorkbenchStore {
       });
       return { ok: false, error: problem.message };
     }
+  }
+
+  runBlock(payload: BlockBuildPayload, options: { autoPlay?: boolean; storyOptions?: RunOptions['storyOptions'] } = {}): RunRecord {
+    const sourceNames = payload.grid
+      .flat()
+      .filter((matrix): matrix is NonNullable<typeof matrix> => Boolean(matrix))
+      .map((matrix) => matrix.name);
+    const newMatrix = {
+      ...payload.built.matrix,
+      name: payload.name,
+      id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      note: `Composed from ${[...new Set(sourceNames)].join('、')}`,
+      shape: `${payload.built.matrix.rows}×${payload.built.matrix.cols}`,
+    };
+    const nextObjects = [...this.state.document.objects, newMatrix];
+    const story = buildBlockStory({
+      grid: payload.grid,
+      built: { ...payload.built, matrix: newMatrix },
+      resultName: payload.name,
+      expression: `${payload.name} = block(${sourceNames.join(', ')})`,
+    });
+    this.set({
+      document: {
+        ...this.state.document,
+        objects: nextObjects,
+        expression: payload.name,
+        revision: this.state.document.revision + 1,
+      },
+      selection: null,
+      problems: [],
+    });
+    return this.loadStoryRun(story, {
+      kind: 'expression',
+      autoPlay: options.autoPlay,
+      storyOptions: options.storyOptions,
+    });
   }
 
   loadStoryRun(story: Story, options: { kind?: RunOptions['kind']; autoPlay?: boolean; storyOptions?: RunOptions['storyOptions'] } = {}): RunRecord {

@@ -14,12 +14,14 @@ interface ResourceDockProps {
   runs: readonly RunRecord[];
   activeRunId: string | null;
   onCreateMatrix: () => void;
+  onOpenBlock: () => void;
   onEditMatrix: (matrix: StoredMatrix) => void;
   onInsertMatrix: (name: string) => void;
   onOpenFormula: (template: FormulaTemplate) => void;
   onOpenFormulaLab: () => void;
   onOpenAlgorithm: (definition: DebugFunctionDefinition) => void;
   onOpenConsole: () => void;
+  onOpenSyntax: () => void;
   onOpenRun: (runId: string) => void;
 }
 
@@ -38,12 +40,14 @@ export default function ResourceDock({
   runs,
   activeRunId,
   onCreateMatrix,
+  onOpenBlock,
   onEditMatrix,
   onInsertMatrix,
   onOpenFormula,
   onOpenFormulaLab,
   onOpenAlgorithm,
   onOpenConsole,
+  onOpenSyntax,
   onOpenRun,
 }: ResourceDockProps) {
   const [query, setQuery] = useState('');
@@ -151,14 +155,18 @@ export default function ResourceDock({
 
       <footer className="ax-resource-footer">
         {mode === 'objects' && (
-          <button type="button" className="ax-button primary tiny" onClick={onCreateMatrix}><Icon name="plus" size={11} /> NEW MATRIX</button>
+          <>
+            <button type="button" className="ax-button primary tiny" onClick={onCreateMatrix}><Icon name="plus" size={11} /> MATRIX</button>
+            <button type="button" className="ax-button tiny" onClick={onOpenBlock}><Icon name="grid" size={11} /> BLOCK</button>
+          </>
         )}
         {mode === 'formulas' && (
           <button type="button" className="ax-button primary tiny" onClick={onOpenFormulaLab}><Icon name="spark" size={11} /> STRUCTURE LAB</button>
         )}
         {mode === 'algorithms' && (
           <>
-            <button type="button" className="ax-button primary tiny" onClick={onOpenConsole}><Icon name="terminal" size={11} /> OPEN CONSOLE</button>
+            <button type="button" className="ax-button primary tiny" onClick={onOpenConsole}><Icon name="terminal" size={11} /> CONSOLE</button>
+            <button type="button" className="ax-button tiny" onClick={onOpenSyntax}><Icon name="book" size={11} /> SYNTAX</button>
           </>
         )}
         {mode === 'runs' && (
