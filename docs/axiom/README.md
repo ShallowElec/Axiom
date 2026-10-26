@@ -1,13 +1,13 @@
 # Axiom · 设计重构包
 
-> **状态：DESIGN DRAFT — 尚未写代码，等待批准。**  
-> **基准日期：** 2026-10-26  
-> **品牌：** Axiom（英文主品牌；中文正文可称“公理”）  
+> **状态：PHASE B + C 已实施；Phase D 后置。**
+> **基准日期：** 2026-10-26
+> **品牌：** Axiom（英文主品牌；中文正文可称“公理”）
 > **本阶段目标：** 在不重写现有精确矩阵内核的前提下，把“矩阵工坊”重构为工程仪器感的 Axiom 工作台，并建立可检查的 Run / Replay 闭环。
 
 ## 0. 为什么现在先写文档
 
-现有应用已经具备可靠的计算核心、95 项测试、逐帧故事板、调试注册表与 Scene 原型，但界面仍以“演示海报”为主要气质：奶油纸张、深色舞台、青柠/珊瑚多色强调、大圆角卡片、衬线大标题、弹窗优先。它更像一个漂亮的数学展览，而不是一套可以长期工作的工程软件。
+现有应用已经具备可靠的计算核心、逐帧故事板、调试注册表与 Scene 原型，但界面仍以“演示海报”为主要气质：奶油纸张、深色舞台、青柠/珊瑚多色强调、大圆角卡片、衬线大标题、弹窗优先。它更像一个漂亮的数学展览，而不是一套可以长期工作的工程软件。
 
 这次重构不是换一层皮。它同时改变四件事：
 
@@ -39,7 +39,8 @@
 | [02-replay-and-trace.md](02-replay-and-trace.md) | 重播语义、Run/Trace/Microframe schema、时间轴 UX、状态机、分支、错误、验收条件 |
 | [03-runtime-refactor.md](03-runtime-refactor.md) | 当前代码审计、目标模块、运行/表示数据流、状态归属、适配现有故事板、测试边界 |
 | [04-delivery-plan.md](04-delivery-plan.md) | 分阶段实施、文件迁移、验收门槛、非目标、风险 |
-| [05-approval-checklist.md](05-approval-checklist.md) | 需要你批准的具体项与仍待确认的问题 |
+| [05-approval-checklist.md](05-approval-checklist.md) | 已批准的设计范围与决策记录 |
+| [06-implementation-log.md](06-implementation-log.md) | Phase B + C 已落地内容、偏差、验证和后置项 |
 | [reference/COLOR_CARD.md](reference/COLOR_CARD.md) | 原始色卡（逐字保留） |
 | [reference/EP01_color_card.png](reference/EP01_color_card.png) | 色卡样张 |
 | [reference/math_workbench_design_v1.1.md](reference/math_workbench_design_v1.1.md) | 你提供的新架构与 UI 设计稿 v1.1（逐字保留） |
@@ -68,8 +69,15 @@
 - 不做完整任意嵌套公式编辑器；第一刀是让现有公式能力进入新的 Axiom 外壳，公式编辑器单独排期。
 - 不改数学语义，不为了视觉效果歪曲 shape/顺序/规则。
 
-## 5. 评审方式
+## 5. 实施状态
 
-请你先读 [05-approval-checklist.md](05-approval-checklist.md)。批准范围后，我再进入代码阶段；未批准前不改 `package.json`、不改 `src/`。
+- 已按批准进入 Phase B + C；实现记录见 [06-implementation-log.md](06-implementation-log.md)。
+- 本轮未做持久化、真 step fork、native trace、WASM/AD/MX；这些仍是后续阶段。
+- 旧主壳层仍留在源码中但未挂载；Phase D 清理/迁移。
+
+## 6. 评审方式
+
+- 设计已于 2026-10-26 批准（[05-approval-checklist.md](05-approval-checklist.md)）。
+- Phase B + C 已实施；下方长期目标仍是后续阶段。
 
 > 参考设计稿中的 Rust/WASM、SQLite、完整 AD、多窗口等长期目标仍然有效，但它们是 **后续阶段**；本包把它们从第一刀中显式剥离，避免一次重构失焦。

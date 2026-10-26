@@ -1,6 +1,6 @@
 # 03 · Runtime / IR 重构与现有代码映射
 
-> 状态：设计稿，待批准。  
+> 状态：已批准；Phase B + C 已按此基线实施。
 > 目标：第一刀把当前“表达式 → 故事板 → UI 一条长链”拆成 **Document → Run/Trace → Presentation → Replay → Renderer**，但保留现有精确矩阵内核与操作语义，不先重写 Rust/WASM。
 
 ## 1. 当前代码审计
@@ -11,7 +11,7 @@
 - `src/presentation` 能编译出细腻的教学故事板；`src/scene` + `src/renderers/scene` 已证明同一故事可以投射到 2D/层叠/平铺。
 - `src/debug` 有独立函数注册表、trace 雏形、调试控制台。
 - `src/formula` 有 headless typed AST、KaTeX 渲染、槽位与安全测试。
-- 95 项测试通过，严格 TypeScript；这些资产必须保留。
+- 102 项测试通过，严格 TypeScript；这些资产必须保留。
 
 ### 1.2 当前的结构性问题
 
@@ -329,7 +329,7 @@ RunRecord + ReplayCursor + Selection
 
 ### 9.1 必保留
 
-- 现有 95 项 core/formula/debug/architecture 测试通过。
+- 现有 102 项 core/formula/debug/architecture 测试通过。
 - 当前矩阵值、shape、story 计算不回归。
 
 ### 9.2 新增
@@ -384,7 +384,7 @@ RunRecord + ReplayCursor + Selection
 - 删除 localStorage/项目保存/旧数据迁移；session 启动 seed。
 - 第一刀不提供 fake step fork。
 
-**待批准/待定**
+**设计期待定 / 后置项**
 
 - 是否保留旧 UI 作为开发期 `?legacy=1` 对照入口，还是直接替换（建议保留一两个 sprint 的开发 flag，不交付给用户）。
 - 是否在第一刀自托管 IBM Plex 字体。

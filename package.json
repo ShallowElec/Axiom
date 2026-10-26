@@ -1,9 +1,9 @@
 {
-  "name": "matrix-atelier",
-  "version": "0.2.0",
+  "name": "axiom-workbench",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "矩阵工坊 — 可观察、可组合的数学工作台",
+  "description": "Axiom — inspectable computational mathematics workbench",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -19,6 +19,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "katex": "^0.19.1",
     "react": "19.1.1",
     "react-dom": "19.1.1"
@@ -35,7 +37,7 @@
     "vite": "7.1.5",
     "vitest": "^5.0.5"
   },
-  "productName": "矩阵工坊",
+  "productName": "Axiom",
   "engines": {
     "node": ">=20.19"
   }

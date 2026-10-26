@@ -46,7 +46,6 @@ export default function DebugConsole({
     () => debugFunctionById(selectedId) ?? DEBUG_FUNCTIONS[0]!,
     [selectedId],
   );
-  const library = useMemo(() => libraryFrom(matrices), [matrices]);
   const filteredGroups = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return DEBUG_GROUPS.map((group) => ({

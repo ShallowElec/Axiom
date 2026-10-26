@@ -1,6 +1,6 @@
 # 02 · 重播、Trace 与时间轴
 
-> 状态：设计稿，待批准。  
+> 状态：已批准；Phase B + C 已按此基线实施。
 > 决策：可检查重放；Run / 执行步骤 / 微观帧三层；运行不可变；修改产生新 run；默认按步骤播放。
 
 ## 1. 目标与非目标
@@ -296,7 +296,7 @@ interface ReplaySession {
 规则：
 
 - `provenance` 在 Run 列表、Replay 头部、检查器、Trace 表头持续显示 `DERIVED`。
-- 不修改现有 `core` 数学语义；当前 95 项测试必须保持通过。
+- 不修改现有 `core` 数学语义；当前 102 项测试必须保持通过。
 - `FlatBeat` 不是天然的内核事件；适配层负责把“教学 beat”映射为“step”，并在文档中记录映射规则。
 - 当前 micro 级别没有每个 cell 的独立计算记录，必须从 beat panels/readout 生成 **view-only** microframes。
 - 未来 native engine 必须保留 `provenance: 'native'`，UI 不因适配层而改变交互。
@@ -512,7 +512,7 @@ interface ReplaySession {
 - 无持久化；刷新即丢。
 - 真分支需要 checkpoint，当前不伪造。
 
-**待批准/待定**
+**设计期待定 / 后置项**
 
 - 默认“Run 后自动播放一次”还是“打开即暂停在末尾”。文档当前建议**自动播放一次，结束停在末尾**；减少动态时跳到末尾。
 - 打开旧 run 时默认落在末尾还是第一 step；当前建议落在末尾，播放键从头重播。

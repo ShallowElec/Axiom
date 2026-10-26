@@ -1,7 +1,7 @@
 # 04 · 实施计划与验收门槛
 
-> 状态：设计稿，待批准。  
-> 本文件只定义编码阶段的顺序、范围和验收；**在明确批准前不修改业务代码**。
+> 状态：Phase B + C 已实施；Phase D 后置。
+> 本文件保留为实施顺序与验收基线。
 
 ## 1. 第一刀范围（批准后立即执行）
 
@@ -30,8 +30,8 @@
 
 ### Phase A：设计批准（当前）
 
-**交付**：本 `docs/axiom/` 文档包 + 参考材料。  
-**退出标准**：你明确批准/修订 [05-approval-checklist.md](05-approval-checklist.md)。  
+**交付**：本 `docs/axiom/` 文档包 + 参考材料。
+**退出标准**：你明确批准/修订 [05-approval-checklist.md](05-approval-checklist.md)。
 **不做**：任何业务代码。
 
 ### Phase B：Axiom foundation（视觉壳层）

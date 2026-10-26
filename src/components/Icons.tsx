@@ -26,6 +26,17 @@ const paths: Record<string, ReactNode> = {
   layers: <><path d="m12 3.5 9 4.5-9 4.5L3 8l9-4.5Z" /><path d="m5 12 7 3.5L19 12M5 16l7 3.5L19 16" /></>,
   book: <><path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z" /><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H17M9 8h4" /></>,
   code: <><path d="m9 7-5 5 5 5M15 7l5 5-5 5" /></>,
+  sun: <><circle cx="12" cy="12" r="3.6" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /></>,
+  moon: <><path d="M20 15.2A8.2 8.2 0 0 1 8.8 4a8.2 8.2 0 1 0 11.2 11.2Z" /></>,
+  terminal: <><path d="m5 7 4 5-4 5M11.5 17H19" /><rect x="3" y="4" width="18" height="16" rx="1" /></>,
+  table: <><rect x="3.5" y="4.5" width="17" height="15" rx="1" /><path d="M3.5 9.5h17M9 9.5v10M15 9.5v10" /></>,
+  stop: <><rect x="6.5" y="6.5" width="11" height="11" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M5.8 5.8l1.4 1.4M16.8 16.8l1.4 1.4M18.2 5.8l-1.4 1.4M7.2 16.8l-1.4 1.4" /></>,
+  panel: <><rect x="3.5" y="4.5" width="17" height="15" rx="1" /><path d="M9 4.5v15" /></>,
+  stepBack: <><path d="M6.5 5.5v13M18 6.5 10.5 12 18 17.5Z" /></>,
+  stepForward: <><path d="M17.5 5.5v13M6 6.5l7.5 5.5L6 17.5Z" /></>,
+  rewind: <><path d="M5 6v12M19 6l-8 6 8 6V6ZM11 6l-5 6 5 6V6Z" /></>,
+  fastForward: <><path d="M19 6v12M5 6l8 6-8 6V6ZM13 6l5 6-5 6V6Z" /></>,
 };
 
 interface IconProps {

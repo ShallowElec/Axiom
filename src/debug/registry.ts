@@ -34,11 +34,6 @@ function matrixFromArg(args: Record<string, JsonValue>, key: string, context: De
   return matrix;
 }
 
-function numberFromArg(args: Record<string, JsonValue>, key: string): number {
-  const value = args[key];
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`参数 ${key} 需要有限数字`);
-  return value;
-}
 
 function artifactsForStory(story: Story): DebugArtifact[] {
   const sources = story.meta.sources.map((source) => ({

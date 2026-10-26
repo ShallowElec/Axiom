@@ -25,11 +25,12 @@ describe('architecture boundaries', () => {
       ...filesUnder('src/core'),
       ...filesUnder('src/presentation'),
       ...filesUnder('src/scene'),
+      ...filesUnder('src/runtime'),
     ].filter((file) => !file.endsWith('.test.ts'));
     for (const file of pureFiles) {
       const code = source(file);
       expect(code, `${file} must not import React`).not.toMatch(/from ['"]react/);
-      expect(code, `${file} must not access browser globals`).not.toMatch(/\b(window|document)\s*\./);
+      expect(code, `${file} must not access browser globals`).not.toMatch(/(?<![\w./'"`])(window|document)\s*\./);
     }
     const formulaFiles = filesUnder('src/formula').filter((file) => !file.endsWith('.test.ts'));
     for (const file of formulaFiles) {
@@ -46,11 +47,22 @@ describe('architecture boundaries', () => {
     expect(code).not.toMatch(/from ['"].*renderers/);
   });
 
-  it('keeps UI components free of direct math imports except purpose-built inspectors', () => {
-    const stage = source('src/components/Theater.tsx');
-    expect(stage).not.toMatch(/from ['"]\.\.\/core\/(matrix|expression|rational)/);
-    expect(stage).toMatch(/storyTypes\.js/);
-    expect(stage).toMatch(/SceneRenderer/);
+  it('keeps the Axiom shell out of engine execution and storage', () => {
+    const app = source('src/AxiomApp.tsx');
+    expect(app).not.toMatch(/buildStoryFromExpression|buildBlockStory|analyzeExpression\(|libraryFrom\(/);
+    expect(app).not.toMatch(/localStorage|indexedDB|sessionStorage/);
+    expect(app).toMatch(/WorkbenchStore/);
+    expect(app).toMatch(/StageView/);
+  });
+
+  it('keeps runtime execution free of React and persistence', () => {
+    const runtime = filesUnder('src/runtime')
+      .filter((file) => !file.endsWith('.test.ts'))
+      .map(source)
+      .join('\n');
+    expect(runtime).not.toMatch(/from ['"]react/);
+    expect(runtime).not.toMatch(/localStorage|indexedDB/);
+    expect(runtime).toMatch(/provenance/);
   });
 
   it('declares serializable scene and trace schema versions', () => {

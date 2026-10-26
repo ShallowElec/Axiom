@@ -39,6 +39,8 @@ export interface SceneNode {
   label: string;
   detail?: string;
   badge?: string;
+  sourceStepId?: string;
+  sourceValueIds?: string[];
   stage: number;
   lane: number;
   status: SceneStatus;

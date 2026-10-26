@@ -4,7 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 const isDev = Boolean(process.env.ELECTRON_START_URL);
-app.setName('矩阵工坊');
+app.setName('Axiom');
 
 function createMenu(): void {
   const isMac = process.platform === 'darwin';
@@ -12,15 +12,15 @@ function createMenu(): void {
     ...(isMac
       ? [
           {
-            label: '矩阵工坊',
+            label: 'Axiom',
             submenu: [
-              { role: 'about', label: '关于矩阵工坊' },
+              { role: 'about', label: '关于 Axiom' },
               { type: 'separator' },
-              { role: 'hide', label: '隐藏矩阵工坊' },
+              { role: 'hide', label: '隐藏 Axiom' },
               { role: 'hideOthers', label: '隐藏其他' },
               { role: 'unhide', label: '全部显示' },
               { type: 'separator' },
-              { role: 'quit', label: '退出矩阵工坊' },
+              { role: 'quit', label: '退出 Axiom' },
             ],
           } satisfies MenuItemConstructorOptions,
         ]
@@ -70,7 +70,7 @@ function createWindow(): void {
     minHeight: 760,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 18, y: 18 },
-    backgroundColor: '#11160f',
+    backgroundColor: '#ffffff',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -82,10 +82,10 @@ function createWindow(): void {
 
   win.once('ready-to-show', () => win.show());
   win.webContents.on('did-fail-load', (_event, code, description, url) => {
-    console.error('[matrix-atelier] page failed to load', code, description, url);
+    console.error('[axiom] page failed to load', code, description, url);
   });
   win.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[matrix-atelier] renderer stopped', details);
+    console.error('[axiom] renderer stopped', details);
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);

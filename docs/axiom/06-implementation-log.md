@@ -1,0 +1,86 @@
+# 06 · Phase B + C 实施记录
+
+> 状态：已实施，2026-10-26。
+> 范围：Axiom 视觉/壳层 + 现有精确 Q 引擎上的不可变 Run / Trace / Replay 垂直切片。
+> 未包含：持久化、真实 step fork、native kernel trace、Rust/WASM、AD/MX、完整公式编辑器。
+
+## 1. 已落地
+
+### 壳层与视觉
+
+- 新增 `src/axiom/theme.css`：白色工程纸面、INK/SKY 单色相、Light/Dark token、0–2px 圆角、1px 硬线、无渐变/发光/阴影。
+- 新增 Axiom 壳层：`CommandBar`、`ActivityRail`、`ResourceDock`、`ExpressionStrip`、`StageView`、`FlatView`、`LayersView`、`Inspector`、`ReplayDock`、`TracePanel`、`ConsolePanel`、`ProblemsPanel`、`StatusBar`。
+- 产品标识改为 Axiom：窗口标题、Electron app name、菜单、favicon、package name/version（`axiom-workbench@0.3.0`）。
+- 自托管 IBM Plex Sans/Mono（Fontsource）；公式仍用 KaTeX 字体。
+- 浅色为默认；深色为近黑 + 白字 + 亮蓝，不保留旧青柠/珊瑚/暖纸张色。
+- 旧深色舞台、奶油卡片、大圆角品牌侧栏不再出现在新壳层。
+
+### 信息架构
+
+- 左侧 46px 活动栏：Objects / Formulas / Algorithms / Runs。
+- 资源 dock 264px（1120 宽默认折叠）；中央表达式条 + Stage/Flat/Layers；右侧检查器；底部 Replay/Trace/Console/Problems dock；状态栏。
+- 无项目保存/导出/恢复入口；全局 `IN-MEMORY` 标识。
+- MatrixEditor 与 FormulaLab 保留为临时功能，并重新皮肤。
+- 公式模板改为 Axiom 风格 `TemplateDialog`，不再打开旧画廊模态。
+- 旧 ProjectModal、旧 DebugConsole overlay、旧主壳层未挂载。
+
+### Runtime / Trace
+
+- 新增 `src/runtime/types.ts`、`derived.ts`、`document.ts`、`workbench-store.ts`。
+- 每次 Run 捕获文档 revision、表达式、时间、引擎信息和不可变 RunRecord。
+- 当前 trace 从现有 Story/FlatBeat 派生，统一标 `provenance: derived`；不伪造 native trace。
+- Run 包含 groups、steps、values、stage frames、microframes、flat/layers Scene、summary 和 error。
+- Scene 附加 `sourceStepId` / `sourceValueIds`，便于检查器与后续视图联动。
+- 编辑文档不覆盖旧 run；旧 run 保留并显示 STALE；再次 Run 创建新 run。
+- 未提供 fake fork：RunRecord 预留 lineage，但 UI 没有不可用的“分支”按钮。
+- 计算失败会生成 failed run + 结构化 Problem，而不是只抛 toast。
+
+### Replay
+
+- 默认按执行步骤播放；完成后停在末尾；从 Runs 打开旧 run 也停在末尾；按播放从第一步重新开始。
+- `STEPS / MICRO` 粒度切换；Micro 模式展开当前 step 的 presentation microframes。
+- 播放/暂停、前后 step、首尾、倍速、loop、时间轴 step 直接跳转。
+- 拖动/跳转只移动 cursor，不调用 exact engine；runtime 测试验证 seek 不触发 runner。
+- `prefers-reduced-motion` 时 Run 不自动播放，直接落在末尾；仍可手动步进。
+- 状态栏与 dock 显示 run、step、provenance、selection。
+
+### 视图与检查器
+
+- Stage 使用白色技术网格、矩阵边框、SKY 语义高亮；点击 cell/panel 更新检查器。
+- Flat/Layers 消费同一份 `Scene` + 同一 cursor/selection；切换视图不重算。
+- Inspector：Overview / Trace，展示 shape、dtype、value、source ID、provenance、microframes；可存回结果矩阵。
+- Console：函数选择、JSON args、输出 artifacts、trace JSON、把 story 结果打开成 function Run。
+- Problems：失败运行的结构化错误，不依赖红色语义。
+
+## 2. 与设计稿的差异
+
+1. **Scene 仍为 v1 schema。** 已增加 source IDs，但没有正式升到 Scene v2；完整 Scene v2 在 Phase D。
+2. **Microframe 是 presentation 派生，不是内核 micro-trace。** 这与 `provenance: derived` 一致；不能当作 native 执行细节。
+3. **真正 step-level fork 未实现。** 这是有意为之：当前故事板没有 execution checkpoint；没有 fake UI。
+4. **Block composer / 旧 Ops 手册 / 旧 TemplateModal 未迁入新壳层。** 公式模板已由新 TemplateDialog 覆盖；分块组合和 Ops 作为 Phase D 资源迁移。
+5. **底部 dock 可折叠但不支持拖拽高度。** 可调分栏与可拆卸窗口后置。
+6. **没有命令面板。** 快捷键基础（F5、Space、方向键、Home/End）已落地；Ctrl/Cmd+K 后置。
+7. **没有持久化。** 刷新即回到 seed session；符合批准范围。
+8. **Function run 只对带 Story 的调试函数生成可 Replay run。** 纯 artifact 函数仍在 Console 查看输出；native/synthetic frame 统一留到 Phase D。
+
+## 3. 验证
+
+- `npm run typecheck`：通过。
+- `npm run build`：Vite + Electron 构建通过。
+- `npm test`：102 项通过（core 41、debug 19、formula 31、scene/runtime 6、architecture 5）。
+- 手工 E2E：
+  - Run `A × B` → 9 steps → pause/seek/step/micro → view switch → cell select → stale → new run.
+  - Run `A + M` → failed run → Problems → no success state.
+  - Template dialog → `det(A)` scalar run → 4 steps.
+  - Console `matmul` → artifacts → OPEN REPLAY → function run.
+  - FormulaLab `A × B` → send to stage.
+  - Light/Dark; 1440×940 与 1120×760；资源栏折叠。
+- 生产 Electron 构建与启动已验证；窗口加载 Axiom、无 localStorage 写入、Run/Trace 可生成、Formula Asset 对话框可用、惰性 FormulaLab chunk 可用。
+- 生产验证覆盖 1440×940；浏览器验证覆盖 1120×760。
+
+## 4. 下一阶段（Phase D）
+
+- 把 Block composer、完整公式结构实验入口、更多算法资产迁入新 IA。
+- Scene v2 / source ID 全覆盖；可拖拽分栏；命令面板；可折叠 loop。
+- 真实 native trace、execution checkpoints、step fork；之后再接 Rust/WASM/AD/MX。
+- 文件/项目持久化作为独立阶段，不与本次 Axiom shell 混做。
