@@ -1,9 +1,9 @@
 {
   "name": "matrix-atelier",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "矩阵工坊 — 可以慢放观看每一个数的线性代数演示工作台",
+  "description": "矩阵工坊 — 可观察、可组合的数学工作台",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -13,7 +13,6 @@
     "start:quick": "node scripts/launch-electron.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:engine": "node scripts/engine-check.mjs",
     "build:renderer": "vite build",
     "build:electron": "node scripts/build-electron.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
@@ -36,5 +35,8 @@
     "vite": "7.1.5",
     "vitest": "^5.0.5"
   },
-  "productName": "矩阵工坊"
+  "productName": "矩阵工坊",
+  "engines": {
+    "node": ">=20.19"
+  }
 }

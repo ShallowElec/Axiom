@@ -69,7 +69,7 @@ export interface SolveResult {
 
 export interface NullspaceResult {
   basis: Q[][];
-  matrix: Matrix;
+  matrix: Matrix | null;
   free: number[];
 }
 
@@ -583,7 +583,7 @@ export function nullspace(A: Matrix): NullspaceResult {
   const pivotCols = new Set(trail.pivots.map((pivot) => pivot.col));
   const free = Array.from({ length: A.cols }, (_, i) => i).filter((c) => !pivotCols.has(c));
   if (!free.length) {
-    return { basis: [], matrix: matrix(A.cols, 0, [] as CellInput[], 'N(A)'), free };
+    return { basis: [], matrix: null, free };
   }
   const basis = free.map((freeCol) => {
     const vec: Q[] = new Array<Q>(A.cols).fill(ZERO);

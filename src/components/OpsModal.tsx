@@ -182,7 +182,7 @@ function computeAdvanced(code: string, first?: Matrix, _matrices?: readonly Matr
       return {
         title: '零空间 · N(A)',
         note: '这些列向量被 A 映到零。零空间的维数 = 自由变量数量。',
-        matrices: [matrixLines(ns.matrix, 'N(A)')],
+        matrices: ns.matrix ? [matrixLines(ns.matrix, 'N(A)')] : [],
         extras: [`零空间维数：${ns.free.length}`, `自由列：${ns.free.map((c) => c + 1).join(', ')}`],
       };
     }

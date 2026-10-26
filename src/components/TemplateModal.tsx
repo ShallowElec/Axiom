@@ -63,6 +63,7 @@ export function suggestSelection(template: FormulaTemplate, matrices: readonly M
 interface TemplateModalProps {
   open: boolean;
   matrices: readonly StoredMatrix[];
+  initialTemplateId?: string | null;
   onClose: () => void;
   onLaunch: (expression: string, template: FormulaTemplate) => void;
   onOpenBlock: () => void;
@@ -71,6 +72,7 @@ interface TemplateModalProps {
 export default function TemplateModal({
   open,
   matrices,
+  initialTemplateId = null,
   onClose,
   onLaunch,
   onOpenBlock,
@@ -95,8 +97,13 @@ export default function TemplateModal({
 
   useEffect(() => {
     if (!open) return;
-    if (!TEMPLATES.some((t) => t.id === selectedId)) setSelectedId(TEMPLATES[0]?.id ?? '');
-  }, [open, selectedId]);
+    if (initialTemplateId && TEMPLATES.some((template) => template.id === initialTemplateId)) {
+      setSelectedId(initialTemplateId);
+      setCategory('all');
+    } else if (!TEMPLATES.some((template) => template.id === selectedId)) {
+      setSelectedId(TEMPLATES[0]?.id ?? '');
+    }
+  }, [open, selectedId, initialTemplateId]);
 
   useEffect(() => {
     if (!open) return;

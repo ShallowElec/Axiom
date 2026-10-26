@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { analyzeExpression } from './core/expression.js';
-import { matrixFromRows } from './core/matrix.js';
 import type { StoredMatrix } from './core/matrix.js';
 import {
   buildBlockStory,
@@ -9,7 +8,7 @@ import {
 } from './presentation/stories.js';
 import type { FlatBeat, Story } from './presentation/storyTypes.js';
 import type { BuildStoryOptions } from './presentation/storyTypes.js';
-import { seedObjects, libraryFrom, EXPRESSION_EXAMPLES } from './content/library.js';
+import { libraryFrom, EXPRESSION_EXAMPLES, TEMPLATES } from './content/library.js';
 import type { FormulaTemplate } from './content/library.js';
 import LibraryPanel from './components/LibraryPanel';
 import ExpressionBar from './components/ExpressionBar';
@@ -21,20 +20,26 @@ import BlockModal from './components/BlockModal';
 import OpsModal from './components/OpsModal';
 import { Modal, ModalHeader } from './components/Modal';
 import { Icon } from './components/Icons';
+import DebugConsole from './debug/DebugConsole.js';
+import { buildStoryScene } from './scene/builders.js';
 import type { MatrixDraft, BlockBuildPayload, ToastMessage, WorkspaceMatrix } from './workspace/types.js';
+import {
+  createProjectRecord,
+  loadProjects,
+  persistProjects,
+  seedWorkspaceObjects,
+  serializeObjects,
+  withShape,
+} from './workspace/project.js';
+import type { ProjectRecord } from './workspace/project.js';
+import ProjectModal from './components/ProjectModal.js';
+import { DEBUG_FUNCTIONS } from './debug/registry.js';
 
-const STORAGE_KEY = 'matrix-atelier.workspace.v1';
-
-interface SerializedMatrix {
-  id: string;
-  name: string;
-  note: string;
-  rows: number;
-  cols: number;
-  data: string[][];
-}
+const FormulaLabModal = lazy(() => import('./components/FormulaLabModal.js'));
 
 interface BootState {
+  projects: ProjectRecord[];
+  activeProjectId: string;
   objects: WorkspaceMatrix[];
   expression: string;
   story: Story;
@@ -47,61 +52,11 @@ interface RunOptions {
   storyOptions?: BuildStoryOptions;
 }
 
-function withShape<T extends { rows: number; cols: number }>(matrix: T): T & { shape: string } {
-  return { ...matrix, shape: `${matrix.rows}×${matrix.cols}` };
-}
-
-function serializeObjects(objects: readonly WorkspaceMatrix[]): SerializedMatrix[] {
-  return objects.map((matrix) => ({
-    id: matrix.id,
-    name: matrix.name,
-    note: matrix.note,
-    rows: matrix.rows,
-    cols: matrix.cols,
-    data: matrix.data.map((row) => row.map((value) => value.toString())),
-  }));
-}
-
-function hydrateObjects(raw: unknown): WorkspaceMatrix[] {
-  if (!Array.isArray(raw) || !raw.length) throw new Error('没有可用的矩阵');
-  const seen = new Set<string>();
-  return raw.map((entry) => {
-    const candidate = entry as Partial<SerializedMatrix>;
-    if (!candidate || typeof candidate.name !== 'string' || !Array.isArray(candidate.data)) {
-      throw new Error('矩阵数据损坏');
-    }
-    if (seen.has(candidate.name)) throw new Error(`矩阵名字重复：${candidate.name}`);
-    seen.add(candidate.name);
-    const matrix = matrixFromRows(candidate.data, candidate.name);
-    return withShape({
-      ...matrix,
-      id: candidate.id || `restored-${candidate.name}-${Math.random().toString(36).slice(2, 7)}`,
-      note: candidate.note || '恢复的矩阵对象',
-    });
-  });
-}
-
 function createBootState(): BootState {
-  let objects = seedObjects().map(withShape) as WorkspaceMatrix[];
-  let expression = 'A × B';
-  let speed = 1;
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') as
-      | { matrices?: unknown; expression?: unknown; speed?: unknown }
-      | null;
-    if (Array.isArray(raw?.matrices) && raw.matrices.length) {
-      try {
-        objects = hydrateObjects(raw.matrices);
-        expression = typeof raw.expression === 'string' ? raw.expression : 'A × B';
-        speed = Number(raw.speed) || 1;
-      } catch {
-        objects = seedObjects().map(withShape) as WorkspaceMatrix[];
-        expression = 'A × B';
-      }
-    }
-  } catch {
-    // A broken local snapshot should never block the atelier from opening.
-  }
+  const { projects, activeProjectId } = loadProjects();
+  const active = projects.find((project) => project.id === activeProjectId) ?? projects[0]!;
+  let objects = active.objects;
+  let expression = active.expression;
   let story: Story;
   try {
     story = buildStoryFromExpression(expression, libraryFrom(objects));
@@ -114,7 +69,14 @@ function createBootState(): BootState {
       throw new Error('无法初始化演示矩阵');
     }
   }
-  return { objects, expression, story, speed };
+  return {
+    projects,
+    activeProjectId: active.id,
+    objects,
+    expression,
+    story,
+    speed: active.speed,
+  };
 }
 
 function nextMatrixName(objects: readonly WorkspaceMatrix[]): string {
@@ -156,6 +118,8 @@ export default function App() {
   if (!bootRef.current) bootRef.current = createBootState();
   const boot = bootRef.current;
 
+  const [projects, setProjects] = useState<ProjectRecord[]>(boot.projects);
+  const [activeProjectId, setActiveProjectId] = useState(boot.activeProjectId);
   const [objects, setObjects] = useState<WorkspaceMatrix[]>(boot.objects);
   const [expression, setExpression] = useState(boot.expression);
   const [story, setStory] = useState<Story>(boot.story);
@@ -170,6 +134,12 @@ export default function App() {
   const [blockOpen, setBlockOpen] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugInitialFunctionId, setDebugInitialFunctionId] = useState<string | null>(null);
+  const [templateInitialId, setTemplateInitialId] = useState<string | null>(null);
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [formulaLabOpen, setFormulaLabOpen] = useState(false);
+  const [stageMode, setStageMode] = useState<'story' | 'layered' | 'flat'>('story');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -185,7 +155,20 @@ export default function App() {
   const suggestedName = useMemo(() => nextMatrixName(objects), [objects]);
   const blockNameSuggestion = useMemo(() => nextBlockName(objects), [objects]);
   const currentBeat: FlatBeat = beats[beatIndex] ?? beats[0]!;
-  const anyModalOpen = editor.open || templateOpen || blockOpen || opsOpen || examplesOpen;
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
+  const anyModalOpen =
+    editor.open ||
+    templateOpen ||
+    blockOpen ||
+    opsOpen ||
+    examplesOpen ||
+    debugOpen ||
+    projectOpen ||
+    formulaLabOpen;
+  const stageScene = useMemo(
+    () => buildStoryScene(story, currentBeat, stageMode === 'flat' ? 'flat' : 'layered'),
+    [story, currentBeat, stageMode],
+  );
   const canonical = (value: string): string =>
     String(value || '').replace(/\s+/g, '').replace(/×/g, '*').replace(/−/g, '-');
   const stale =
@@ -200,15 +183,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ version: 1, matrices: serializeObjects(objects), expression, speed }),
+    setProjects((current) => {
+      const next = current.map((project) =>
+        project.id === activeProjectId
+          ? { ...project, objects, expression, speed, updatedAt: Date.now() }
+          : project,
       );
-    } catch {
-      // Storage can be unavailable; the app still runs in memory.
-    }
-  }, [objects, expression, speed]);
+      persistProjects(next, activeProjectId);
+      return next;
+    });
+  }, [objects, expression, speed, activeProjectId]);
 
   useEffect(() => {
     if (anyModalOpen) setToast(null);
@@ -391,7 +375,7 @@ export default function App() {
 
   const handleReset = (): void => {
     if (!window.confirm('重置矩阵库与当前表达式？本地保存的实验会被清空。')) return;
-    const fresh = seedObjects().map(withShape) as WorkspaceMatrix[];
+    const fresh = seedWorkspaceObjects();
     const freshStory = buildStoryFromExpression('A × B', libraryFrom(fresh));
     setObjects(fresh);
     setExpression('A × B');
@@ -401,10 +385,99 @@ export default function App() {
     showToast('已回到初始实验');
   };
 
+  const snapshotProjects = useCallback(
+    (records: readonly ProjectRecord[]): ProjectRecord[] =>
+      records.map((project) =>
+        project.id === activeProjectId
+          ? { ...project, objects, expression, speed, updatedAt: Date.now() }
+          : project,
+      ),
+    [activeProjectId, objects, expression, speed],
+  );
+
+  const applyProject = useCallback((project: ProjectRecord): void => {
+    let nextExpression = project.expression;
+    let nextObjects = project.objects;
+    let nextStory: Story;
+    try {
+      nextStory = buildStoryFromExpression(nextExpression, libraryFrom(nextObjects));
+    } catch {
+      const fallback = nextObjects.find((matrix) => matrix.name === 'A') ?? nextObjects[0];
+      nextExpression = fallback?.name ?? 'A';
+      nextStory = buildStoryFromExpression(nextExpression, libraryFrom(nextObjects));
+    }
+    setObjects(nextObjects);
+    setExpression(nextExpression);
+    setStory(nextStory);
+    setSpeed(project.speed);
+    setBeatIndex(0);
+    setPlaying(false);
+    setSavedStoryId(null);
+  }, []);
+
+  const openProject = (projectId: string): void => {
+    const target = projects.find((project) => project.id === projectId);
+    if (!target || projectId === activeProjectId) {
+      setProjectOpen(false);
+      return;
+    }
+    const nextProjects = snapshotProjects(projects);
+    setProjects(nextProjects);
+    persistProjects(nextProjects, projectId);
+    setActiveProjectId(projectId);
+    applyProject(target);
+    setProjectOpen(false);
+    showToast(`已打开项目「${target.name}」`);
+  };
+
+  const createProject = (name: string): void => {
+    const project = createProjectRecord(name.trim() || '新的数学现场');
+    const nextProjects = [...snapshotProjects(projects), project];
+    setProjects(nextProjects);
+    persistProjects(nextProjects, project.id);
+    setActiveProjectId(project.id);
+    applyProject(project);
+    setProjectOpen(false);
+    showToast(`已创建项目「${project.name}」`);
+  };
+
+  const renameProjectById = (projectId: string, name: string): void => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const nextProjects = projects.map((project) =>
+      project.id === projectId ? { ...project, name: trimmed, updatedAt: Date.now() } : project,
+    );
+    setProjects(nextProjects);
+    persistProjects(nextProjects, activeProjectId);
+    showToast(`项目已重命名为「${trimmed}」`);
+  };
+
+  const deleteProjectById = (projectId: string): void => {
+    if (projects.length <= 1) {
+      showToast('至少保留一个项目。', 'error');
+      return;
+    }
+    const target = projects.find((project) => project.id === projectId);
+    if (!target) return;
+    if (!window.confirm(`删除项目「${target.name}」？其中的矩阵与表达式将一并删除。`)) return;
+    const base = snapshotProjects(projects);
+    const remaining = base.filter((project) => project.id !== projectId);
+    const nextActive =
+      projectId === activeProjectId
+        ? remaining[0]!
+        : base.find((project) => project.id === activeProjectId)!;
+    persistProjects(remaining, nextActive.id);
+    setProjects(remaining);
+    setActiveProjectId(nextActive.id);
+    if (projectId === activeProjectId) applyProject(nextActive);
+    showToast(`已删除项目「${target.name}」`);
+  };
+
   const handleExport = (): void => {
     const payload = {
       app: '矩阵工坊 / Matrix Atelier',
-      version: 1,
+      version: 2,
+      project: activeProject?.name ?? '未命名项目',
       exportedAt: new Date().toISOString(),
       expression: story.meta.expression,
       rule: story.meta.rule,
@@ -513,6 +586,11 @@ export default function App() {
       const target = event.target;
       if (target instanceof HTMLElement && target.closest('input, textarea, select, button, [contenteditable="true"]')) return;
       if (anyModalOpen) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        setDebugOpen((open) => !open);
+        return;
+      }
       if (event.code === 'Space') {
         event.preventDefault();
         togglePlay();
@@ -542,12 +620,33 @@ export default function App() {
     <div className={`app-shell platform-${window.desktop?.platform || 'web'}`}>
       <LibraryPanel
         matrices={objects}
+        formulas={TEMPLATES}
+        algorithms={DEBUG_FUNCTIONS}
+        projectName={activeProject?.name ?? '未命名项目'}
         onCreate={openNewMatrix}
         onEdit={openEditMatrix}
         onInsert={insertMatrix}
         onOpenBlock={() => setBlockOpen(true)}
         onReset={handleReset}
         onExport={handleExport}
+        onOpenProjects={() => setProjectOpen(true)}
+        onOpenFormula={(templateId) => {
+          setTemplateInitialId(templateId);
+          setTemplateOpen(true);
+        }}
+        onOpenAlgorithm={(functionId) => {
+          setDebugInitialFunctionId(functionId);
+          setDebugOpen(true);
+        }}
+        onOpenAllFormulas={() => {
+          setTemplateInitialId(null);
+          setTemplateOpen(true);
+        }}
+        onOpenDebug={() => {
+          setDebugInitialFunctionId(null);
+          setDebugOpen(true);
+        }}
+        onOpenFormulaLab={() => setFormulaLabOpen(true)}
       />
 
       <main className="workspace">
@@ -555,16 +654,39 @@ export default function App() {
           <div className="workbench-path">
             <span className="path-kicker">MATRIX ATELIER</span>
             <span className="path-sep">/</span>
-            <strong>演示现场</strong>
+            <button type="button" className="project-switch" onClick={() => setProjectOpen(true)}>
+              <Icon name="layers" size={13} />
+              <strong>{activeProject?.name ?? '未命名项目'}</strong>
+              <Icon name="chevron" size={11} />
+            </button>
+            <span className="path-sep">/</span>
+            <strong>演算台</strong>
             <span className="session-tag">SESSION {String(story.meta.operationCount).padStart(2, '0')}</span>
           </div>
           <div className="topbar-actions">
             <span className="autosave-status"><span className="status-dot ok" /> 自动保存</span>
-            <button type="button" className="topbar-button" onClick={() => setTemplateOpen(true)}>
-              <Icon name="template" size={15} /> 公式模板
+            <button
+              type="button"
+              className="topbar-button"
+              onClick={() => {
+                setTemplateInitialId(null);
+                setTemplateOpen(true);
+              }}
+            >
+              <Icon name="template" size={15} /> 公式仓库
             </button>
             <button type="button" className="topbar-button" onClick={() => setOpsOpen(true)}>
               <Icon name="book" size={15} /> 运算手册
+            </button>
+            <button
+              type="button"
+              className={`topbar-button ${debugOpen ? 'active' : ''}`}
+              onClick={() => {
+                setDebugInitialFunctionId(null);
+                setDebugOpen((open) => !open);
+              }}
+            >
+              <Icon name="function" size={15} /> 调试台
             </button>
             <button type="button" className="topbar-icon" onClick={handleExport} title="导出实验快照" aria-label="导出实验快照">
               <Icon name="download" size={16} />
@@ -596,6 +718,9 @@ export default function App() {
             onSpeed={setSpeed}
             stale={stale}
             expressionValid={analysis.ok}
+            viewMode={stageMode}
+            onViewMode={setStageMode}
+            scene={stageScene}
           />
           <Inspector
             story={story}
@@ -628,6 +753,7 @@ export default function App() {
       <TemplateModal
         open={templateOpen}
         matrices={objects}
+        initialTemplateId={templateInitialId}
         onClose={() => setTemplateOpen(false)}
         onLaunch={launchTemplate}
         onOpenBlock={() => {
@@ -693,6 +819,56 @@ export default function App() {
           </div>
         </Modal>
       )}
+
+      {formulaLabOpen && (
+        <Suspense fallback={<div className="formula-lab-loading"><span>装载公式结构实验…</span></div>}>
+          <FormulaLabModal
+            open
+            matrices={objects}
+            onClose={() => setFormulaLabOpen(false)}
+            onOpenInStage={(value) => {
+              setFormulaLabOpen(false);
+              const ok = runExpression(value, {
+                toast: null,
+                storyOptions: {
+                  template: {
+                    title: '公式结构实验 · 现场',
+                    eyebrow: 'FORMULA STRUCTURE LAB',
+                    description: '从 typed AST 槽位送入演算台的现场表达式。',
+                  },
+                },
+              });
+              if (ok) showToast(`结构已送入演算台：${value}`);
+            }}
+          />
+        </Suspense>
+      )}
+
+      <ProjectModal
+        open={projectOpen}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onClose={() => setProjectOpen(false)}
+        onSwitch={openProject}
+        onCreate={createProject}
+        onRename={renameProjectById}
+        onDelete={deleteProjectById}
+      />
+
+      <DebugConsole
+        open={debugOpen}
+        matrices={objects}
+        initialFunctionId={debugInitialFunctionId}
+        onClose={() => setDebugOpen(false)}
+        onOpenStory={(nextStory) => {
+          setStory(nextStory);
+          setExpression(nextStory.inputExpression);
+          setBeatIndex(0);
+          setPlaying(false);
+          setDebugOpen(false);
+          showToast('调试故事板已送入主舞台');
+        }}
+      />
 
       {toast && (
         <div className={`toast ${toast.type}`} key={toast.id}>

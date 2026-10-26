@@ -25,6 +25,7 @@ const paths: Record<string, ReactNode> = {
   function: <><path d="M14.5 4.5h-2A2.5 2.5 0 0 0 10 7v11m-3-9h7M4.5 20 19 4" /></>,
   layers: <><path d="m12 3.5 9 4.5-9 4.5L3 8l9-4.5Z" /><path d="m5 12 7 3.5L19 12M5 16l7 3.5L19 16" /></>,
   book: <><path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z" /><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H17M9 8h4" /></>,
+  code: <><path d="m9 7-5 5 5 5M15 7l5 5-5 5" /></>,
 };
 
 interface IconProps {

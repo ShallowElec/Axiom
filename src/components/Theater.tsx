@@ -5,6 +5,8 @@ import MatrixPanel from './MatrixPanel';
 import { useElementSize } from '../hooks/useElementSize.js';
 import type { ElementSize } from '../hooks/useElementSize.js';
 import type { FlatBeat, Story, StoryBeat } from '../presentation/storyTypes.js';
+import type { Scene } from '../scene/types.js';
+import SceneRenderer from '../renderers/scene/SceneRenderer.js';
 
 function formatSpeed(value: number): string {
   return Number.isInteger(value) ? `${value.toFixed(1)}×` : `${value.toFixed(2).replace(/0$/, '')}×`;
@@ -86,6 +88,9 @@ interface TheaterProps {
   onSpeed: (speed: number) => void;
   stale?: boolean;
   expressionValid?: boolean;
+  viewMode?: 'story' | 'layered' | 'flat';
+  onViewMode?: (mode: 'story' | 'layered' | 'flat') => void;
+  scene?: Scene | null;
 }
 
 export default function Theater({
@@ -100,6 +105,9 @@ export default function Theater({
   onSpeed,
   stale = false,
   expressionValid = true,
+  viewMode = 'story',
+  onViewMode,
+  scene = null,
 }: TheaterProps) {
   const [viewportRef, viewportSize] = useElementSize();
   const beat = beats[beatIndex] ?? beats[0];
@@ -142,10 +150,28 @@ export default function Theater({
           <h2>{chapter?.title}</h2>
           <p>{chapter?.description}</p>
         </div>
-        <div className="shape-contract">
-          <span>SHAPE CONTRACT</span>
-          <strong>{story.meta.shapeChain}</strong>
-          <em>{beatInChapter} / {chapter?.beats.length ?? 0} 帧 · 第 {chapterNumber} 幕</em>
+        <div className="stage-side">
+          <div className="stage-view-switch" role="group" aria-label="舞台呈现方式">
+            {([
+              ['story', '2D'],
+              ['layered', '层叠'],
+              ['flat', '平铺'],
+            ] as const).map(([mode, label]) => (
+              <button
+                type="button"
+                key={mode}
+                className={viewMode === mode ? 'active' : ''}
+                onClick={() => onViewMode?.(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="shape-contract">
+            <span>SHAPE CONTRACT</span>
+            <strong>{story.meta.shapeChain}</strong>
+            <em>{beatInChapter} / {chapter?.beats.length ?? 0} 帧 · 第 {chapterNumber} 幕</em>
+          </div>
         </div>
       </header>
 
@@ -173,14 +199,24 @@ export default function Theater({
         <div className="viewport-grid" aria-hidden="true" />
         <div className="viewport-index top-left">LIVE COMPUTE / 现场演算</div>
         <div className="viewport-index top-right">EXACT RATIONAL</div>
-        <div className="beat-caption">
-          <span className="capture-mark">▸</span>
-          <div>
-            <strong>{beat?.title}</strong>
-            <span>{beat?.narration}</span>
+        {viewMode === 'story' ? (
+          <>
+            <div className="beat-caption">
+              <span className="capture-mark">▸</span>
+              <div>
+                <strong>{beat?.title}</strong>
+                <span>{beat?.narration}</span>
+              </div>
+            </div>
+            {beat && <PanelFlow beat={beat} viewportSize={viewportSize} />}
+          </>
+        ) : (
+          <div className="scene-host">
+            {scene ? <SceneRenderer scene={scene} /> : (
+              <div className="scene-fallback">当前步骤还没有可用的场景。</div>
+            )}
           </div>
-        </div>
-        {beat && <PanelFlow beat={beat} viewportSize={viewportSize} />}
+        )}
         <div className="beat-progress" key={beat?.id ?? 'empty'}>
           <span
             style={{
