@@ -1,46 +1,154 @@
+/**
+ * Expression parser and evaluator.
+ *
+ * Parsing is intentionally small and explicit. Evaluation returns both values
+ * and an ordered operation record; presentation layers can reconstruct every
+ * intermediate value without re-running mathematics.
+ */
+
 import { Q, formatNumber } from './rational.js';
+import type { RationalInput } from './rational.js';
 import {
   add,
   adjugate,
   determinant,
+  divide,
   hadamard,
   inverse,
   kronecker,
   matmul,
+  minor,
   power,
   rank,
   rref,
   scale,
+  solveLinear,
   subtract,
   trace,
   transpose,
-  divide,
-  solveLinear,
-  minor,
 } from './matrix.js';
+import type { Matrix } from './matrix.js';
+import type {
+  EvaluationResult,
+  MatrixRuntimeValue,
+  OperationRecord,
+  OperationType,
+  RuntimeValue,
+  ScalarRuntimeValue,
+  Shape,
+} from './protocol.js';
 
-const FUNCTION_NAMES = new Map([
-  ['det', { min: 1, max: 1 }],
-  ['inv', { min: 1, max: 1 }],
-  ['inverse', { min: 1, max: 1 }],
-  ['rank', { min: 1, max: 1 }],
-  ['trace', { min: 1, max: 1 }],
-  ['rref', { min: 1, max: 1 }],
-  ['transpose', { min: 1, max: 1 }],
-  ['adj', { min: 1, max: 1 }],
-  ['solve', { min: 2, max: 2 }],
-  ['minor', { min: 3, max: 3 }],
-]);
+/* ------------------------------------------------------------------ *
+ * AST
+ * ------------------------------------------------------------------ */
+
+export type BinaryOperator = '+' | '-' | '*' | '/' | '⊙' | '⊗';
+export type CallName = 'det' | 'inv' | 'rank' | 'trace' | 'rref' | 'transpose' | 'adj' | 'solve' | 'minor';
+
+export interface NumberNode {
+  type: 'number';
+  value: Q;
+  raw: string;
+  pos: number;
+}
+
+export interface MatrixNode {
+  type: 'matrix';
+  name: string;
+  pos: number;
+}
+
+export interface GroupNode {
+  type: 'group';
+  operand: AstNode;
+  pos: number;
+}
+
+export interface UnaryNode {
+  type: 'unary';
+  op: '-';
+  operand: AstNode;
+  pos: number;
+}
+
+export interface BinaryNode {
+  type: 'binary';
+  op: BinaryOperator;
+  left: AstNode;
+  right: AstNode;
+  pos: number;
+}
+
+export interface PowerNode {
+  type: 'power';
+  base: AstNode;
+  exponent: AstNode;
+  pos: number;
+}
+
+export interface TransposeNode {
+  type: 'transpose';
+  operand: AstNode;
+  pos: number;
+}
+
+export interface CallNode {
+  type: 'call';
+  name: CallName;
+  args: AstNode[];
+  pos: number;
+}
+
+export type AstNode =
+  | NumberNode
+  | MatrixNode
+  | GroupNode
+  | UnaryNode
+  | BinaryNode
+  | PowerNode
+  | TransposeNode
+  | CallNode;
+
+export interface MatrixLibrary {
+  [name: string]: Matrix;
+}
+
+/* ------------------------------------------------------------------ *
+ * Errors & tokens
+ * ------------------------------------------------------------------ */
 
 export class ExpressionError extends Error {
-  constructor(message, position = null) {
+  readonly position: number | null;
+
+  constructor(message: string, position: number | null = null) {
     super(message);
     this.name = 'ExpressionError';
     this.position = position;
   }
 }
 
-function normalizeInput(input) {
+type TokenType = 'number' | 'name' | '^' | '+' | '-' | '*' | '/' | '(' | ')' | ',' | '⊙' | '⊗' | 'ᵀ' | 'eof';
+
+interface Token {
+  type: TokenType;
+  value: string;
+  pos: number;
+}
+
+const FUNCTION_NAMES: Record<string, { min: number; max: number }> = {
+  det: { min: 1, max: 1 },
+  inv: { min: 1, max: 1 },
+  inverse: { min: 1, max: 1 },
+  rank: { min: 1, max: 1 },
+  trace: { min: 1, max: 1 },
+  rref: { min: 1, max: 1 },
+  transpose: { min: 1, max: 1 },
+  adj: { min: 1, max: 1 },
+  solve: { min: 2, max: 2 },
+  minor: { min: 3, max: 3 },
+};
+
+function normalizeInput(input: string): string {
   return String(input)
     .replace(/[−–—]/g, '-')
     .replace(/[×·⋅∙]/g, '*')
@@ -49,66 +157,70 @@ function normalizeInput(input) {
     .replace(/⁻¹/g, '^(-1)')
     .replace(/²/g, '^2')
     .replace(/³/g, '^3')
-    .replace(/⊙/g, '⊙')
-    .replace(/⊗/g, '⊗')
     .trim();
 }
 
-export function tokenize(input) {
-  const s = normalizeInput(input);
-  const tokens = [];
+export function tokenize(input: string): Token[] {
+  const source = normalizeInput(input);
+  const tokens: Token[] = [];
   let i = 0;
-  while (i < s.length) {
-    const ch = s[i];
+  while (i < source.length) {
+    const ch = source[i] as string;
     if (/\s/.test(ch)) {
       i++;
       continue;
     }
     if (/[0-9.]/.test(ch)) {
       let j = i;
-      while (j < s.length && /[0-9.]/.test(s[j])) j++;
-      const text = s.slice(i, j);
-      if ((text.match(/\./g) || []).length > 1) throw new ExpressionError(`小数格式有误：${text}`, i);
-      tokens.push({ type: 'number', value: text, pos: i });
+      while (j < source.length && /[0-9.]/.test(source[j] as string)) j++;
+      const value = source.slice(i, j);
+      if ((value.match(/\./g) ?? []).length > 1) throw new ExpressionError(`小数格式有误：${value}`, i);
+      tokens.push({ type: 'number', value, pos: i });
       i = j;
       continue;
     }
     if (/[A-Za-z_\u03b1-\u03c9]/.test(ch)) {
       let j = i + 1;
-      while (j < s.length && /[A-Za-z0-9_\u03b1-\u03c9]/.test(s[j])) j++;
-      tokens.push({ type: 'name', value: s.slice(i, j), pos: i });
+      while (j < source.length && /[A-Za-z0-9_\u03b1-\u03c9]/.test(source[j] as string)) j++;
+      tokens.push({ type: 'name', value: source.slice(i, j), pos: i });
       i = j;
       continue;
     }
-    if (ch === '^' || ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '(' || ch === ')' || ch === ',') {
-      tokens.push({ type: ch, value: ch, pos: i });
+    if ('^+-*/()'.includes(ch)) {
+      tokens.push({ type: ch as TokenType, value: ch, pos: i });
       i++;
       continue;
     }
-    if (ch === '⊙' || ch === '⊗' || ch === 'ᵀ') {
+    if (ch === ',' || ch === '⊙' || ch === '⊗' || ch === 'ᵀ') {
       tokens.push({ type: ch, value: ch, pos: i });
       i++;
       continue;
     }
     throw new ExpressionError(`无法识别字符「${ch}」`, i);
   }
-  tokens.push({ type: 'eof', value: '', pos: s.length });
+  tokens.push({ type: 'eof', value: '', pos: source.length });
   return tokens;
 }
 
+/* ------------------------------------------------------------------ *
+ * Parser
+ * ------------------------------------------------------------------ */
+
 class Parser {
-  constructor(input, library) {
-    this.input = input;
+  private readonly tokens: Token[];
+  private pos = 0;
+  private readonly library: MatrixLibrary;
+
+  constructor(input: string, library: MatrixLibrary) {
     this.tokens = tokenize(input);
-    this.pos = 0;
     this.library = library;
   }
 
-  peek(offset = 0) {
-    return this.tokens[this.pos + offset];
+  private peek(offset = 0): Token {
+    return this.tokens[this.pos + offset] ?? { type: 'eof', value: '', pos: 0 };
   }
 
-  match(type) {
+  private match(type: TokenType): Token | null {
     if (this.peek().type === type) {
       const token = this.peek();
       this.pos++;
@@ -117,13 +229,13 @@ class Parser {
     return null;
   }
 
-  expect(type, message) {
+  private expect(type: TokenType, message?: string): Token {
     const token = this.match(type);
-    if (!token) throw new ExpressionError(message || `这里需要一个「${type}」`, this.peek().pos);
+    if (!token) throw new ExpressionError(message ?? `这里需要一个「${type}」`, this.peek().pos);
     return token;
   }
 
-  parse() {
+  parse(): AstNode {
     if (this.peek().type === 'eof') throw new ExpressionError('写一个矩阵表达式，例如 A × B');
     const node = this.parseAdditive();
     if (this.peek().type !== 'eof') {
@@ -132,46 +244,53 @@ class Parser {
     return node;
   }
 
-  parseAdditive() {
+  private parseAdditive(): AstNode {
     let node = this.parseMultiplicative();
     while (this.peek().type === '+' || this.peek().type === '-') {
-      const op = this.pos++;
+      const token = this.tokens[this.pos++];
+      if (!token) break;
       const right = this.parseMultiplicative();
-      node = { type: 'binary', op: this.tokens[op].type, left: node, right, pos: this.tokens[op].pos };
-    }
-    return node;
-  }
-
-  parseMultiplicative() {
-    let node = this.parseUnary();
-    while (['*', '/', '⊙', '⊗'].includes(this.peek().type)) {
-      const token = this.pos++;
-      const right = this.parseUnary();
       node = {
         type: 'binary',
-        op: this.tokens[token].type,
+        op: token.type as BinaryOperator,
         left: node,
         right,
-        pos: this.tokens[token].pos,
+        pos: token.pos,
       };
     }
     return node;
   }
 
-  parseUnary() {
+  private parseMultiplicative(): AstNode {
+    let node = this.parseUnary();
+    while (['*', '/', '⊙', '⊗'].includes(this.peek().type)) {
+      const token = this.tokens[this.pos++];
+      if (!token) break;
+      const right = this.parseUnary();
+      node = {
+        type: 'binary',
+        op: token.type as BinaryOperator,
+        left: node,
+        right,
+        pos: token.pos,
+      };
+    }
+    return node;
+  }
+
+  private parseUnary(): AstNode {
     const token = this.match('-');
     if (token) return { type: 'unary', op: '-', operand: this.parseUnary(), pos: token.pos };
     return this.parsePower();
   }
 
-  parsePower() {
+  private parsePower(): AstNode {
     let node = this.parsePostfix();
     if (this.match('^')) {
       const next = this.peek();
       if (next.type === 'name' && (next.value === 'T' || next.value === 't')) {
         this.pos++;
-        node = { type: 'transpose', operand: node, pos: node.pos };
-        return node;
+        return { type: 'transpose', operand: node, pos: node.pos };
       }
       const right = this.parseUnary();
       node = { type: 'power', base: node, exponent: right, pos: node.pos };
@@ -179,7 +298,7 @@ class Parser {
     return node;
   }
 
-  parsePostfix() {
+  private parsePostfix(): AstNode {
     let node = this.parsePrimary();
     while (this.peek().type === 'ᵀ') {
       this.pos++;
@@ -188,7 +307,7 @@ class Parser {
     return node;
   }
 
-  parsePrimary() {
+  private parsePrimary(): AstNode {
     const token = this.peek();
     if (token.type === 'number') {
       this.pos++;
@@ -205,27 +324,32 @@ class Parser {
       const name = token.value;
       if (this.peek().type === '(') {
         this.pos++;
-        const args = [];
+        const args: AstNode[] = [];
         if (this.peek().type !== ')') {
           args.push(this.parseAdditive());
           while (this.match(',')) args.push(this.parseAdditive());
         }
         this.expect(')', `函数 ${name}(...) 缺少右括号`);
-        const meta = FUNCTION_NAMES.get(name.toLowerCase());
+        const meta = FUNCTION_NAMES[name.toLowerCase()];
         if (!meta) throw new ExpressionError(`未知函数「${name}」`, token.pos);
         if (args.length < meta.min || args.length > meta.max) {
-          throw new ExpressionError(`函数 ${name} 需要 ${meta.min === meta.max ? meta.min : `${meta.min}–${meta.max}`} 个参数`, token.pos);
+          throw new ExpressionError(
+            `函数 ${name} 需要 ${meta.min === meta.max ? meta.min : `${meta.min}–${meta.max}`} 个参数`,
+            token.pos,
+          );
         }
-        return {
-          type: 'call',
-          name: name.toLowerCase() === 'inverse' ? 'inv' : name.toLowerCase() === 'transpose' ? 'transpose' : name.toLowerCase(),
-          args,
-          pos: token.pos,
-        };
+        const callName: CallName =
+          name.toLowerCase() === 'inverse'
+            ? 'inv'
+            : (name.toLowerCase() as CallName);
+        return { type: 'call', name: callName, args, pos: token.pos };
       }
       if (!this.library[name]) {
         const examples = Object.keys(this.library).slice(0, 6).join('、');
-        throw new ExpressionError(`矩阵库里没有「${name}」${examples ? `（现有：${examples}）` : ''}`, token.pos);
+        throw new ExpressionError(
+          `矩阵库里没有「${name}」${examples ? `（现有：${examples}）` : ''}`,
+          token.pos,
+        );
       }
       return { type: 'matrix', name, pos: token.pos };
     }
@@ -234,97 +358,166 @@ class Parser {
   }
 }
 
-export function parseExpression(input, library) {
+export interface ParseSuccess {
+  ok: true;
+  ast: AstNode;
+}
+
+export interface ParseFailure {
+  ok: false;
+  error: string;
+}
+
+export type ParseResult = ParseSuccess | ParseFailure;
+
+export function parseExpression(input: string, library: MatrixLibrary): ParseResult {
   try {
     const parser = new Parser(input, library);
     return { ok: true, ast: parser.parse() };
   } catch (error) {
-    return { ok: false, error: error instanceof ExpressionError ? error.message : String(error) };
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-const BINARY_SYMBOL = { '+': '+', '-': '−', '*': '×', '/': '÷', '⊙': '⊙', '⊗': '⊗' };
+const BINARY_SYMBOL: Record<BinaryOperator, string> = {
+  '+': '+',
+  '-': '−',
+  '*': '×',
+  '/': '÷',
+  '⊙': '⊙',
+  '⊗': '⊗',
+};
 
-export function formatAst(node, { pretty = true } = {}) {
-  if (!node) return '';
+export function formatAst(node: AstNode): string {
   switch (node.type) {
     case 'matrix':
       return node.name;
     case 'number':
       return formatNumber(node.value);
     case 'group':
-      return `(${formatAst(node.operand, { pretty })})`;
+      return `(${formatAst(node.operand)})`;
     case 'unary':
-      return `−${formatAst(node.operand, { pretty })}`;
+      return `−${formatAst(node.operand)}`;
     case 'binary':
-      return `${formatAst(node.left, { pretty })} ${BINARY_SYMBOL[node.op] || node.op} ${formatAst(node.right, { pretty })}`;
+      return `${formatAst(node.left)} ${BINARY_SYMBOL[node.op]} ${formatAst(node.right)}`;
     case 'power':
-      return `${formatAst(node.base, { pretty })}^${formatAst(node.exponent, { pretty })}`;
+      return `${formatAst(node.base)}^${formatAst(node.exponent)}`;
     case 'transpose':
-      return `${formatAst(node.operand, { pretty })}ᵀ`;
+      return `${formatAst(node.operand)}ᵀ`;
     case 'call':
-      return `${node.name}(${node.args.map((arg) => formatAst(arg, { pretty })).join(', ')})`;
-    default:
-      return '';
+      return `${node.name}(${node.args.map(formatAst).join(', ')})`;
   }
 }
 
-function valueLabel(value) {
-  return value.label;
-}
+/* ------------------------------------------------------------------ *
+ * Runtime value helpers
+ * ------------------------------------------------------------------ */
 
-function asMatrix(value, context) {
+function asMatrixValue(value: RuntimeValue, context: string): MatrixRuntimeValue {
   if (value.kind !== 'matrix') {
     throw new ExpressionError(`${context} 需要矩阵，但 ${value.label} 是标量`);
   }
-  return value.matrix;
+  return value;
 }
 
-function asScalar(value, context) {
+function asScalar(value: RuntimeValue, context: string): Q {
   if (value.kind !== 'scalar') {
     throw new ExpressionError(`${context} 需要标量数字，但 ${value.label} 是矩阵`);
   }
   return value.value;
 }
 
-function scalarInteger(value, context) {
+function scalarInteger(value: RuntimeValue, context: string): number {
   const scalar = asScalar(value, context);
-  if (!scalar.isInteger) throw new ExpressionError(`${context} 需要整数标量，得到 ${formatNumber(scalar)}`);
+  if (!scalar.isInteger) {
+    throw new ExpressionError(`${context} 需要整数标量，得到 ${formatNumber(scalar)}`);
+  }
   return Number(scalar.n);
 }
 
+type RuntimeValueDraft =
+  | Omit<MatrixRuntimeValue, 'label'>
+  | Omit<ScalarRuntimeValue, 'label'>;
+
+interface OperationDraft {
+  type: OperationType;
+  operands: RuntimeValue[];
+  expr: string;
+  resultValue: RuntimeValueDraft;
+  semantic: string;
+  scalar?: Q;
+  scalarLabel?: string;
+  division?: boolean;
+  exponent?: number;
+}
+
 /**
- * Evaluate a parsed expression and record a linear list of operations.
- * Each intermediate matrix gets a label M₁, M₂, … for later animation.
+ * Evaluate a parsed expression while recording a flat, ordered list of
+ * operations. Each intermediate gets a label M₁, M₂, … (or s₁ for scalars).
  */
-export function evaluateExpression(ast, library, { record = true } = {}) {
-  const ops = [];
+export function evaluateExpression(
+  ast: AstNode,
+  library: MatrixLibrary,
+  options: { record?: boolean } = {},
+): EvaluationResult {
+  const { record = true } = options;
+  const ops: OperationRecord[] = [];
   let computedCount = 0;
 
-  const makeRecord = (op) => {
+  const makeRecord = (draft: OperationDraft): RuntimeValue => {
     computedCount += 1;
-    const resultValue = op.resultValue;
-    const label = resultValue.kind === 'matrix' ? `M${computedCount}` : `s${computedCount}`;
-    const labeledResult =
-      resultValue.kind === 'matrix'
-        ? { ...resultValue, matrix: { ...resultValue.matrix, name: label }, label }
-        : { ...resultValue, label };
-    const record = { ...op, id: `op-${computedCount}`, label, operands: op.operands, resultValue: labeledResult };
-    if (record) ops.push(record);
-    return labeledResult;
+    const label = draft.resultValue.kind === 'matrix' ? `M${computedCount}` : `s${computedCount}`;
+    const resultValue: RuntimeValue =
+      draft.resultValue.kind === 'matrix'
+        ? {
+            kind: 'matrix',
+            matrix: { ...draft.resultValue.matrix, name: label },
+            expr: draft.resultValue.expr,
+            label,
+          }
+        : {
+            kind: 'scalar',
+            value: draft.resultValue.value,
+            expr: draft.resultValue.expr,
+            label,
+          };
+    if (record) {
+      ops.push({
+        id: `op-${computedCount}`,
+        type: draft.type,
+        label,
+        expr: draft.expr,
+        semantic: draft.semantic,
+        operands: draft.operands,
+        resultValue,
+        ...(draft.scalar !== undefined ? { scalar: draft.scalar } : {}),
+        ...(draft.scalarLabel !== undefined ? { scalarLabel: draft.scalarLabel } : {}),
+        ...(draft.division !== undefined ? { division: draft.division } : {}),
+        ...(draft.exponent !== undefined ? { exponent: draft.exponent } : {}),
+      });
+    }
+    return resultValue;
   };
 
-  const visit = (node) => {
+  const visit = (node: AstNode): RuntimeValue => {
     switch (node.type) {
       case 'number':
-        return { kind: 'scalar', value: node.value, label: formatNumber(node.value), expr: formatNumber(node.value) };
+        return {
+          kind: 'scalar',
+          value: node.value,
+          label: formatNumber(node.value),
+          expr: formatNumber(node.value),
+        };
+
       case 'matrix': {
         const entry = library[node.name];
         if (!entry) throw new ExpressionError(`找不到矩阵 ${node.name}`);
         return { kind: 'matrix', matrix: entry, label: node.name, expr: node.name, origin: 'input' };
       }
+
       case 'group':
         return visit(node.operand);
+
       case 'unary': {
         const value = visit(node.operand);
         if (node.op === '-') {
@@ -337,14 +530,19 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
               operands: [value],
               expr: `−${value.expr}`,
               resultValue: { kind: 'matrix', matrix: result, expr: `−${value.expr}` },
-              resultMatrix: result,
               semantic: '数乘',
             });
           }
-          return { kind: 'scalar', value: value.value.neg(), label: `−${value.label}`, expr: `−${value.expr}` };
+          return {
+            kind: 'scalar',
+            value: value.value.neg(),
+            label: `−${value.label}`,
+            expr: `−${value.expr}`,
+          };
         }
         return value;
       }
+
       case 'transpose': {
         const value = asMatrixValue(visit(node.operand), '转置');
         const result = transpose(value.matrix);
@@ -353,42 +551,48 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
           operands: [value],
           expr: `${value.expr}ᵀ`,
           resultValue: { kind: 'matrix', matrix: result, expr: `${value.expr}ᵀ` },
-          resultMatrix: result,
           semantic: '转置',
         });
       }
+
       case 'power': {
         const base = visit(node.base);
         const exponent = visit(node.exponent);
         if (base.kind === 'matrix') {
-          const e = scalarInteger(exponent, '矩阵幂');
-          const result = power(base.matrix, e);
+          const exp = scalarInteger(exponent, '矩阵幂');
+          const result = power(base.matrix, exp);
           return makeRecord({
-            type: e === -1 ? 'inverse' : e === 0 ? 'identity' : e === 1 ? 'copy' : 'power',
-            exponent: e,
+            type: exp === -1 ? 'inverse' : exp === 0 ? 'identity' : exp === 1 ? 'copy' : 'power',
+            exponent: exp,
             operands: [base],
-            expr: `${base.expr}^${e}`,
-            resultValue: { kind: 'matrix', matrix: result, expr: `${base.expr}^${e}` },
-            resultMatrix: result,
+            expr: `${base.expr}^${exp}`,
+            resultValue: { kind: 'matrix', matrix: result, expr: `${base.expr}^${exp}` },
             semantic: '矩阵幂',
           });
         }
-        const s = asScalar(base, '标量幂').pow(scalarInteger(exponent, '标量幂'));
+        const result = asScalar(base, '标量幂').pow(scalarInteger(exponent, '标量幂'));
         return {
           kind: 'scalar',
-          value: s,
-          label: formatNumber(s),
+          value: result,
+          label: formatNumber(result),
           expr: `${base.expr}^${exponent.expr}`,
         };
       }
+
       case 'binary': {
         const left = visit(node.left);
         const right = visit(node.right);
         const symbol = BINARY_SYMBOL[node.op];
+
         if (node.op === '+' || node.op === '-') {
           if (left.kind === 'scalar' && right.kind === 'scalar') {
             const value = node.op === '+' ? left.value.add(right.value) : left.value.sub(right.value);
-            return { kind: 'scalar', value, label: formatNumber(value), expr: `${left.expr} ${symbol} ${right.expr}` };
+            return {
+              kind: 'scalar',
+              value,
+              label: formatNumber(value),
+              expr: `${left.expr} ${symbol} ${right.expr}`,
+            };
           }
           const a = asMatrixValue(left, `矩阵${symbol}法`);
           const b = asMatrixValue(right, `矩阵${symbol}法`);
@@ -398,10 +602,10 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
             operands: [a, b],
             expr: `${a.expr} ${symbol} ${b.expr}`,
             resultValue: { kind: 'matrix', matrix: result, expr: `${a.expr} ${symbol} ${b.expr}` },
-            resultMatrix: result,
             semantic: node.op === '+' ? '矩阵加法' : '矩阵减法',
           });
         }
+
         if (node.op === '*') {
           if (left.kind === 'matrix' && right.kind === 'matrix') {
             const result = matmul(left.matrix, right.matrix);
@@ -410,7 +614,6 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
               operands: [left, right],
               expr: `${left.expr} × ${right.expr}`,
               resultValue: { kind: 'matrix', matrix: result, expr: `${left.expr} × ${right.expr}` },
-              resultMatrix: result,
               semantic: '矩阵乘法',
             });
           }
@@ -423,7 +626,6 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
               operands: [right],
               expr: `${left.label} × ${right.expr}`,
               resultValue: { kind: 'matrix', matrix: result, expr: `${left.label} × ${right.expr}` },
-              resultMatrix: result,
               semantic: '数乘',
             });
           }
@@ -436,33 +638,33 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
               operands: [left],
               expr: `${left.expr} × ${right.label}`,
               resultValue: { kind: 'matrix', matrix: result, expr: `${left.expr} × ${right.label}` },
-              resultMatrix: result,
               semantic: '数乘',
             });
           }
-          const value = left.value.mul(right.value);
+          const value = asScalar(left, '标量乘法').mul(asScalar(right, '标量乘法'));
           return { kind: 'scalar', value, label: formatNumber(value), expr: `${left.expr} × ${right.expr}` };
         }
+
         if (node.op === '/') {
           if (left.kind === 'matrix') {
-            const s = asScalar(right, '矩阵除法');
-            if (s.isZero) throw new ExpressionError('不能除以 0');
-            const result = divide(left.matrix, s);
+            const scalar = asScalar(right, '矩阵除法');
+            if (scalar.isZero) throw new ExpressionError('不能除以 0');
+            const result = divide(left.matrix, scalar);
             return makeRecord({
               type: 'scale',
-              scalar: s.pow(-1),
-              scalarLabel: `1/${formatNumber(s)}`,
+              scalar: scalar.pow(-1),
+              scalarLabel: `1/${formatNumber(scalar)}`,
               division: true,
               operands: [left],
               expr: `${left.expr} ÷ ${right.label}`,
               resultValue: { kind: 'matrix', matrix: result, expr: `${left.expr} ÷ ${right.label}` },
-              resultMatrix: result,
               semantic: '数除',
             });
           }
           const value = asScalar(left, '除法').div(asScalar(right, '除法'));
           return { kind: 'scalar', value, label: formatNumber(value), expr: `${left.expr} ÷ ${right.expr}` };
         }
+
         if (node.op === '⊙') {
           const a = asMatrixValue(left, 'Hadamard 乘积');
           const b = asMatrixValue(right, 'Hadamard 乘积');
@@ -472,10 +674,10 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
             operands: [a, b],
             expr: `${a.expr} ⊙ ${b.expr}`,
             resultValue: { kind: 'matrix', matrix: result, expr: `${a.expr} ⊙ ${b.expr}` },
-            resultMatrix: result,
             semantic: 'Hadamard 逐项乘积',
           });
         }
+
         if (node.op === '⊗') {
           const a = asMatrixValue(left, 'Kronecker 积');
           const b = asMatrixValue(right, 'Kronecker 积');
@@ -488,17 +690,18 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
             operands: [a, b],
             expr: `${a.expr} ⊗ ${b.expr}`,
             resultValue: { kind: 'matrix', matrix: result, expr: `${a.expr} ⊗ ${b.expr}` },
-            resultMatrix: result,
             semantic: 'Kronecker 积',
           });
         }
+
         throw new ExpressionError(`暂不支持运算符 ${node.op}`);
       }
+
       case 'call': {
         const args = node.args.map(visit);
         switch (node.name) {
           case 'det': {
-            const a = asMatrixValue(args[0], 'det');
+            const a = asMatrixValue(args[0]!, 'det');
             const value = determinant(a.matrix);
             return makeRecord({
               type: 'determinant',
@@ -510,7 +713,7 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
             });
           }
           case 'trace': {
-            const a = asMatrixValue(args[0], 'trace');
+            const a = asMatrixValue(args[0]!, 'trace');
             const value = trace(a.matrix);
             return makeRecord({
               type: 'trace',
@@ -522,7 +725,7 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
             });
           }
           case 'rank': {
-            const a = asMatrixValue(args[0], 'rank');
+            const a = asMatrixValue(args[0]!, 'rank');
             const value = Q.of(rank(a.matrix));
             return makeRecord({
               type: 'rank',
@@ -534,147 +737,176 @@ export function evaluateExpression(ast, library, { record = true } = {}) {
             });
           }
           case 'inv': {
-            const a = asMatrixValue(args[0], 'inv');
+            const a = asMatrixValue(args[0]!, 'inv');
             const result = inverse(a.matrix);
             return makeRecord({
               type: 'inverse',
               operands: [a],
               expr: `inv(${a.expr})`,
               resultValue: { kind: 'matrix', matrix: result, expr: `inv(${a.expr})` },
-              resultMatrix: result,
               semantic: '逆矩阵',
             });
           }
           case 'adj': {
-            if (args[0].kind !== 'matrix') throw new ExpressionError('adj 需要矩阵参数');
-            const result = adjugate(args[0].matrix);
+            const a = asMatrixValue(args[0]!, 'adj');
+            const result = adjugate(a.matrix);
             return makeRecord({
               type: 'adjugate',
-              operands: [args[0]],
-              expr: `adj(${args[0].expr})`,
-              resultValue: { kind: 'matrix', matrix: result, expr: `adj(${args[0].expr})` },
-              resultMatrix: result,
+              operands: [a],
+              expr: `adj(${a.expr})`,
+              resultValue: { kind: 'matrix', matrix: result, expr: `adj(${a.expr})` },
               semantic: '伴随矩阵',
             });
           }
           case 'rref': {
-            const a = asMatrixValue(args[0], 'rref');
+            const a = asMatrixValue(args[0]!, 'rref');
             const result = rref(a.matrix);
             return makeRecord({
               type: 'rref',
               operands: [a],
               expr: `rref(${a.expr})`,
               resultValue: { kind: 'matrix', matrix: result, expr: `rref(${a.expr})` },
-              resultMatrix: result,
               semantic: '简化行阶梯形',
             });
           }
           case 'transpose': {
-            const a = asMatrixValue(args[0], 'transpose');
+            const a = asMatrixValue(args[0]!, 'transpose');
             const result = transpose(a.matrix);
             return makeRecord({
               type: 'transpose',
               operands: [a],
               expr: `transpose(${a.expr})`,
               resultValue: { kind: 'matrix', matrix: result, expr: `transpose(${a.expr})` },
-              resultMatrix: result,
               semantic: '转置',
             });
           }
           case 'solve': {
-            if (args[0].kind !== 'matrix' || args[1].kind !== 'matrix') {
-              throw new ExpressionError('solve(A, b) 需要两个矩阵参数');
-            }
-            const { x } = solveLinear(args[0].matrix, args[1].matrix);
+            const a = asMatrixValue(args[0]!, 'solve');
+            const b = asMatrixValue(args[1]!, 'solve');
+            const { x } = solveLinear(a.matrix, b.matrix);
             return makeRecord({
               type: 'solve',
-              operands: [args[0], args[1]],
-              expr: `solve(${args[0].expr}, ${args[1].expr})`,
-              resultValue: { kind: 'matrix', matrix: x, expr: `solve(${args[0].expr}, ${args[1].expr})` },
-              resultMatrix: x,
+              operands: [a, b],
+              expr: `solve(${a.expr}, ${b.expr})`,
+              resultValue: { kind: 'matrix', matrix: x, expr: `solve(${a.expr}, ${b.expr})` },
               semantic: '线性方程组求解',
             });
           }
           case 'minor': {
-            if (args[0].kind !== 'matrix') throw new ExpressionError('minor 的第一个参数需要矩阵');
-            const row = scalarInteger(args[1], 'minor 行号');
-            const col = scalarInteger(args[2], 'minor 列号');
-            const value = minor(args[0].matrix, row - 1, col - 1);
+            const a = asMatrixValue(args[0]!, 'minor');
+            const row = scalarInteger(args[1]!, 'minor 行号');
+            const col = scalarInteger(args[2]!, 'minor 列号');
+            const value = minor(a.matrix, row - 1, col - 1);
             return {
               kind: 'scalar',
               value,
               label: formatNumber(value),
-              expr: `minor(${args[0].expr},${row},${col})`,
+              expr: `minor(${a.expr},${row},${col})`,
             };
           }
-          default:
-            throw new ExpressionError(`暂不支持函数 ${node.name}`);
         }
       }
-      default:
-        throw new ExpressionError('表达式结构无法识别');
     }
   };
 
   const result = visit(ast);
-  if (record && ops.length && result.kind === 'matrix') {
-    // The last result is the one shown in the conclusion. Mark its friendly label.
+  if (record && ops.length) {
     const last = ops[ops.length - 1];
-    last.isRoot = true;
-  }
-  if (record && ops.length && result.kind === 'scalar') {
-    const last = ops[ops.length - 1];
-    last.isRoot = true;
+    if (last) last.isRoot = true;
   }
   return { result, ops };
 }
 
-function asMatrixValue(value, context) {
-  if (value.kind !== 'matrix') {
-    throw new ExpressionError(`${context} 需要矩阵，但 ${value.label} 是标量`);
-  }
-  return value;
+/* ------------------------------------------------------------------ *
+ * Analysis facade
+ * ------------------------------------------------------------------ */
+
+export interface AnalysisSuccess {
+  ok: true;
+  ast: AstNode;
+  result: RuntimeValue;
+  formatted: string;
+  opCount: number;
+  label: string;
+  kind: 'matrix';
+  shape: Shape;
 }
 
-export function analyzeExpression(input, library) {
+export interface ScalarAnalysisSuccess {
+  ok: true;
+  ast: AstNode;
+  result: ScalarRuntimeValue;
+  formatted: string;
+  opCount: number;
+  label: string;
+  kind: 'scalar';
+  value: Q;
+}
+
+export interface AnalysisFailure {
+  ok: false;
+  input: string;
+  error: string;
+  ast?: AstNode;
+}
+
+export type ExpressionAnalysis = AnalysisSuccess | ScalarAnalysisSuccess | AnalysisFailure;
+
+export function analyzeExpression(input: string, library: MatrixLibrary): ExpressionAnalysis {
   const parsed = parseExpression(input, library);
   if (!parsed.ok) return { ok: false, error: parsed.error, input };
   try {
     const { result, ops } = evaluateExpression(parsed.ast, library, { record: true });
+    const formatted = formatAst(parsed.ast);
     if (result.kind === 'matrix') {
       return {
         ok: true,
         ast: parsed.ast,
+        result,
+        formatted,
+        opCount: ops.length,
+        label: result.label,
         kind: 'matrix',
         shape: { rows: result.matrix.rows, cols: result.matrix.cols },
-        label: result.label,
-        result,
-        opCount: ops.length,
-        formatted: formatAst(parsed.ast),
       };
     }
     return {
       ok: true,
       ast: parsed.ast,
+      result,
+      formatted,
+      opCount: ops.length,
+      label: result.label,
       kind: 'scalar',
       value: result.value,
-      label: result.label,
-      result,
-      opCount: ops.length,
-      formatted: formatAst(parsed.ast),
     };
   } catch (error) {
-    return { ok: false, error: error.message, input, ast: parsed.ast };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      input,
+      ast: parsed.ast,
+    };
   }
 }
 
-export function describeShape(value) {
+export function describeShape(value: RuntimeValue | null | undefined): string {
   if (!value) return '';
   if (value.kind === 'scalar') return `标量 ${formatNumber(value.value)}`;
   return `${value.matrix.rows}×${value.matrix.cols}`;
 }
 
-export function insertAtCursor(text, insert, selectionStart, selectionEnd) {
+export interface InsertResult {
+  value: string;
+  cursor: number;
+}
+
+export function insertAtCursor(
+  text: string,
+  insert: string,
+  selectionStart?: number | null,
+  selectionEnd?: number | null,
+): InsertResult {
   const start = selectionStart ?? text.length;
   const end = selectionEnd ?? text.length;
   const before = text.slice(0, start);
@@ -682,9 +914,11 @@ export function insertAtCursor(text, insert, selectionStart, selectionEnd) {
   const startsWithSpace = /^\s/.test(insert);
   const endsWithSpace = /\s$/.test(insert);
   const needsSpaceBefore =
-    before && !/[\s(]$/.test(before) && !/^[+\-*/^,)]/.test(insert) && !startsWithSpace;
+    before.length > 0 && !/[\s(]$/.test(before) && !/^[+\-*/^,)]/.test(insert) && !startsWithSpace;
   const needsSpaceAfter =
-    after && !/^[\s)]/.test(after) && !/[+\-*/^,(]$/.test(insert) && !endsWithSpace;
+    after.length > 0 && !/^[\s)]/.test(after) && !/[+\-*/^,(]$/.test(insert) && !endsWithSpace;
   const value = `${needsSpaceBefore ? ' ' : ''}${insert}${needsSpaceAfter ? ' ' : ''}`;
   return { value: before + value + after, cursor: start + value.length };
 }
+
+export type { RationalInput };

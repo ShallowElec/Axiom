@@ -1,6 +1,62 @@
-import { determinant, matrixFromRows } from '../engine/matrix.js';
+import { determinant, matrixFromRows } from '../core/matrix.js';
+import type { Matrix } from '../core/matrix.js';
+import type { MatrixLibrary } from '../core/expression.js';
 
-export const SEED_MATRICES = [
+export interface SeedMatrixDefinition {
+  id: string;
+  name: string;
+  note: string;
+  rows: number;
+  cols: number;
+  data: number[][];
+}
+
+export interface SeedMatrixObject extends Matrix {
+  id: string;
+  note: string;
+}
+
+export type TemplateCategory = 'product' | 'eliminate' | 'structure' | 'readout';
+export type TemplateAccent = 'lime' | 'coral' | 'mint' | 'amber';
+export type SlotAccept = 'any' | 'square' | 'vector';
+
+export interface TemplateSlot {
+  key: string;
+  label: string;
+  hint: string;
+  accept: SlotAccept;
+}
+
+export interface FormulaTemplate {
+  id: string;
+  category: TemplateCategory;
+  title: string;
+  subtitle: string;
+  formula: string;
+  symbol: string;
+  accent: TemplateAccent;
+  description: string;
+  eyebrow?: string;
+  slots: TemplateSlot[];
+  build: (selection: Record<string, string>) => string;
+  validate: (selected: (Matrix | undefined)[]) => string | null;
+  checkLines: string[];
+}
+
+export interface OperationReferenceItem {
+  syntax: string;
+  name: string;
+  desc: string;
+  code: string;
+  advanced?: boolean;
+}
+
+export interface OperationReferenceGroup {
+  group: string;
+  items: OperationReferenceItem[];
+}
+
+export const SEED_MATRICES: SeedMatrixDefinition[] = [
   {
     id: 'seed-a',
     name: 'A',
@@ -53,18 +109,23 @@ export const SEED_MATRICES = [
   },
 ];
 
-export function seedObjects() {
-  return SEED_MATRICES.map((m) => {
-    const matrix = matrixFromRows(m.data, m.name);
-    return { ...matrix, id: m.id, note: m.note };
+export function seedObjects(): SeedMatrixObject[] {
+  return SEED_MATRICES.map((definition) => {
+    const matrix = matrixFromRows(definition.data, definition.name);
+    return { ...matrix, id: definition.id, note: definition.note };
   });
 }
 
-export function libraryFrom(objects) {
-  return Object.fromEntries(objects.map((m) => [m.name, m]));
+export function libraryFrom(objects: readonly Matrix[]): MatrixLibrary {
+  return Object.fromEntries(objects.map((matrix) => [matrix.name, matrix]));
 }
 
-export const EXPRESSION_EXAMPLES = [
+export interface ExpressionExample {
+  expression: string;
+  label: string;
+}
+
+export const EXPRESSION_EXAMPLES: ExpressionExample[] = [
   { expression: 'A × B', label: '两个作用相遇' },
   { expression: 'A × B + A', label: '复合表达式' },
   { expression: 'det(M)', label: '行列式展开' },
@@ -77,7 +138,12 @@ export const EXPRESSION_EXAMPLES = [
   { expression: 'A^2', label: '矩阵幂' },
 ];
 
-export const TEMPLATE_CATEGORIES = [
+export interface TemplateCategoryOption {
+  id: TemplateCategory | 'all';
+  label: string;
+}
+
+export const TEMPLATE_CATEGORIES: TemplateCategoryOption[] = [
   { id: 'all', label: '全部' },
   { id: 'product', label: '乘法' },
   { id: 'eliminate', label: '消元' },
@@ -85,7 +151,7 @@ export const TEMPLATE_CATEGORIES = [
   { id: 'readout', label: '标量' },
 ];
 
-export const TEMPLATES = [
+export const TEMPLATES: FormulaTemplate[] = [
   {
     id: 'matmul',
     category: 'product',
@@ -307,7 +373,7 @@ export const TEMPLATES = [
   },
 ];
 
-export const OPS_REFERENCE = [
+export const OPS_REFERENCE: OperationReferenceGroup[] = [
   {
     group: '逐格运算',
     items: [

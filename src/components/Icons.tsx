@@ -1,6 +1,6 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 
-const paths = {
+const paths: Record<string, ReactNode> = {
   play: <><path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none" /></>,
   pause: <><path d="M8 5.5h3.2v13H8zM13.2 5.5h3.2v13h-3.2z" fill="currentColor" stroke="none" /></>,
   back: <><path d="M15.5 6 8.5 12l7 6M8.5 6v12" /></>,
@@ -27,7 +27,14 @@ const paths = {
   book: <><path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z" /><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H17M9 8h4" /></>,
 };
 
-export function Icon({ name, size = 18, strokeWidth = 1.7, className = '' }) {
+interface IconProps {
+  name: string;
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+}
+
+export function Icon({ name, size = 18, strokeWidth = 1.7, className = '' }: IconProps) {
   return (
     <svg
       className={`icon ${className}`}

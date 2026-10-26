@@ -1,26 +1,42 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Q, formatNumber } from '../engine/rational.js';
-import { Modal, ModalHeader } from './Modal.jsx';
-import { Icon } from './Icons.jsx';
-import { randomMatrix } from '../engine/matrix.js';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { Q, formatNumber } from '../core/rational.js';
+import { Modal, ModalHeader } from './Modal';
+import { Icon } from './Icons';
+import { randomMatrix } from '../core/matrix.js';
+import type { StoredMatrix } from '../core/matrix.js';
+import type { MatrixDraft } from '../workspace/types.js';
 
-function emptyGrid(rows, cols) {
+function emptyGrid(rows: number, cols: number): string[][] {
   return Array.from({ length: rows }, () => Array.from({ length: cols }, () => '0'));
 }
 
-function resizeGrid(grid, rows, cols) {
+function resizeGrid(grid: string[][], rows: number, cols: number): string[][] {
   return Array.from({ length: rows }, (_, r) =>
     Array.from({ length: cols }, (_, c) => grid[r]?.[c] ?? '0'),
   );
 }
 
-function validateName(name, existing, editingName) {
+function validateName(name: string, existing: readonly string[], editingName?: string): string | null {
   const trimmed = name.trim();
   if (!trimmed) return '矩阵需要一个名字';
   if (!/^[A-Za-z][A-Za-z0-9_]{0,2}$/.test(trimmed)) return '名字需以字母开头，最多 3 个字符（字母、数字、下划线）';
   if (trimmed !== editingName && existing.includes(trimmed)) return `矩阵 ${trimmed} 已经存在`;
   return null;
 }
+
+interface MatrixEditorModalProps {
+  open: boolean;
+  initial: StoredMatrix | null;
+  suggestedName: string;
+  existingNames: readonly string[];
+  onClose: () => void;
+  onSave: (draft: MatrixDraft) => void;
+  onDelete: (matrix: StoredMatrix) => void;
+}
+
+type CellErrors = Record<string, string | undefined>;
+type FillKind = 'zero' | 'identity' | 'random' | 'ones';
 
 export default function MatrixEditorModal({
   open,
@@ -30,32 +46,32 @@ export default function MatrixEditorModal({
   onClose,
   onSave,
   onDelete,
-}) {
+}: MatrixEditorModalProps) {
   const [name, setName] = useState('');
   const [rows, setRows] = useState(3);
   const [cols, setCols] = useState(3);
-  const [grid, setGrid] = useState(emptyGrid(3, 3));
-  const [errors, setErrors] = useState({});
-  const [nameError, setNameError] = useState(null);
+  const [grid, setGrid] = useState<string[][]>(emptyGrid(3, 3));
+  const [errors, setErrors] = useState<CellErrors>({});
+  const [nameError, setNameError] = useState<string | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
-  const [pasteError, setPasteError] = useState(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [note, setNote] = useState('');
 
   const isEditing = Boolean(initial);
 
   useEffect(() => {
     if (!open) return;
-    const nextName = initial?.name || suggestedName || 'A';
+    const nextName = initial?.name ?? suggestedName ?? 'A';
     setName(nextName);
-    setRows(initial?.rows || 2);
-    setCols(initial?.cols || 2);
+    setRows(initial?.rows ?? 2);
+    setCols(initial?.cols ?? 2);
     setGrid(
       initial
         ? initial.data.map((row) => row.map((v) => formatNumber(v)))
         : emptyGrid(2, 2),
     );
-    setNote(initial?.note || '');
+    setNote(initial?.note ?? '');
     setErrors({});
     setNameError(null);
     setPasteOpen(false);
@@ -67,26 +83,26 @@ export default function MatrixEditorModal({
 
   if (!open) return null;
 
-  const updateCell = (r, c, value) => {
+  const updateCell = (r: number, c: number, value: string): void => {
     setGrid((current) =>
       current.map((line, ri) => (ri === r ? line.map((cell, ci) => (ci === c ? value : cell)) : line)),
     );
     if (errors[`${r},${c}`]) setErrors((current) => ({ ...current, [`${r},${c}`]: undefined }));
   };
 
-  const changeRows = (value) => {
+  const changeRows = (value: number | string): void => {
     const n = Math.max(1, Math.min(10, Number(value) || 1));
     setRows(n);
     setGrid((current) => resizeGrid(current, n, cols));
   };
 
-  const changeCols = (value) => {
+  const changeCols = (value: number | string): void => {
     const n = Math.max(1, Math.min(10, Number(value) || 1));
     setCols(n);
     setGrid((current) => resizeGrid(current, rows, n));
   };
 
-  const fill = (kind) => {
+  const fill = (kind: FillKind): void => {
     if (kind === 'zero') {
       setGrid(emptyGrid(rows, cols));
       return;
@@ -105,7 +121,7 @@ export default function MatrixEditorModal({
     }
   };
 
-  const applyPaste = () => {
+  const applyPaste = (): void => {
     setPasteError(null);
     const lines = pasteText
       .trim()
@@ -117,7 +133,7 @@ export default function MatrixEditorModal({
       return;
     }
     const parsed = lines.map((line) => line.split(/[\s,;，]+/).filter(Boolean));
-    const width = parsed[0].length;
+    const width = parsed[0]?.length ?? 0;
     if (!width) {
       setPasteError('没有读到数字。');
       return;
@@ -130,7 +146,7 @@ export default function MatrixEditorModal({
       setPasteError('演示矩阵最大为 10×10。');
       return;
     }
-    const cellErrors = {};
+    const cellErrors: CellErrors = {};
     parsed.forEach((line, r) =>
       line.forEach((value, c) => {
         try {
@@ -152,11 +168,11 @@ export default function MatrixEditorModal({
     setPasteText('');
   };
 
-  const submit = (event) => {
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const nextNameError = validateName(name, existingNames, initial?.name);
     setNameError(nextNameError);
-    const cellErrors = {};
+    const cellErrors: CellErrors = {};
     const parsed = [];
     for (let r = 0; r < rows; r++) {
       const row = [];
@@ -167,7 +183,7 @@ export default function MatrixEditorModal({
           row.push(rational);
           if (String(value).trim() === '') cellErrors[`${r},${c}`] = '不能为空';
         } catch (error) {
-          cellErrors[`${r},${c}`] = error.message;
+          cellErrors[`${r},${c}`] = error instanceof Error ? error.message : '数值格式有误';
         }
       }
       parsed.push(row);
@@ -181,7 +197,7 @@ export default function MatrixEditorModal({
       rows,
       cols,
       data: parsed,
-      note: note.trim() || (isEditing ? initial.note : '自定义矩阵对象'),
+      note: note.trim() || initial?.note || '自定义矩阵对象',
     });
   };
 
@@ -190,7 +206,7 @@ export default function MatrixEditorModal({
       <ModalHeader
         id="matrix-editor-title"
         eyebrow={isEditing ? 'EDIT MATRIX / 改写对象' : 'NEW MATRIX / 新建对象'}
-        title={isEditing ? `改写矩阵 ${initial.name}` : '造一个矩阵'}
+        title={isEditing ? `改写矩阵 ${initial?.name ?? ''}` : '造一个矩阵'}
         description="任意形状、任意有理数。分数可以直接写成 a/b，小数会精确化为分数。"
         onClose={onClose}
       />
@@ -309,7 +325,7 @@ export default function MatrixEditorModal({
         <div className="modal-actions">
           <div className="modal-actions-left">
             {isEditing && onDelete && (
-              <button type="button" className="danger-button" onClick={() => onDelete(initial)}>
+              <button type="button" className="danger-button" onClick={() => initial && onDelete(initial)}>
                 <Icon name="trash" size={14} /> 删除
               </button>
             )}

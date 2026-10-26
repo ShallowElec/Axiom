@@ -1,18 +1,26 @@
-import React from 'react';
-import { Icon, BrandMark } from './Icons.jsx';
-import { MatrixMini } from './MatrixPanel.jsx';
+import { Icon, BrandMark } from './Icons';
+import { MatrixMini } from './MatrixPanel';
+import type { StoredMatrix } from '../core/matrix.js';
+
+interface LibraryPanelProps {
+  matrices: readonly StoredMatrix[];
+  onCreate: () => void;
+  onEdit: (matrix: StoredMatrix) => void;
+  onInsert: (name: string) => void;
+  onOpenBlock: () => void;
+  onReset: () => void;
+  onExport: () => void;
+}
 
 export default function LibraryPanel({
   matrices,
-  stories,
   onCreate,
   onEdit,
   onInsert,
   onOpenBlock,
   onReset,
   onExport,
-  activeExpression,
-}) {
+}: LibraryPanelProps) {
   return (
     <aside className="library">
       <div className="library-brand">

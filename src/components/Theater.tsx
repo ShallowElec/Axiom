@@ -1,21 +1,30 @@
-import React, { useMemo } from 'react';
-import { Icon } from './Icons.jsx';
-import MatrixPanel from './MatrixPanel.jsx';
+import { Fragment, useMemo } from 'react';
+import type { CSSProperties } from 'react';
+import { Icon } from './Icons';
+import MatrixPanel from './MatrixPanel';
 import { useElementSize } from '../hooks/useElementSize.js';
+import type { ElementSize } from '../hooks/useElementSize.js';
+import type { FlatBeat, Story, StoryBeat } from '../presentation/storyTypes.js';
 
-function formatSpeed(value) {
+function formatSpeed(value: number): string {
   return Number.isInteger(value) ? `${value.toFixed(1)}×` : `${value.toFixed(2).replace(/0$/, '')}×`;
 }
 
-function PanelFlow({ beat, viewportSize }) {
-  const panels = beat.panels || [];
+interface PanelFlowProps {
+  beat: StoryBeat;
+  viewportSize: ElementSize;
+}
+
+function PanelFlow({ beat, viewportSize }: PanelFlowProps) {
+  const panels = beat.panels;
   const width = viewportSize.width || 760;
   const height = viewportSize.height || 360;
   const connectorCount = Math.max(0, panels.length - 1);
   const panelCount = Math.max(panels.length, 1);
   const totalCols = Math.max(1, panels.reduce((sum, p) => sum + p.matrix.cols, 0));
   const maxRows = Math.max(1, ...panels.map((p) => p.matrix.rows));
-  const hasReadout = Boolean(beat.readout);
+  const readout = beat.readout;
+  const hasReadout = Boolean(readout);
   const horizontalOverhead = 46 + panelCount * 32 + connectorCount * 42;
   const usableWidth = Math.max(96, width - horizontalOverhead);
   const usableHeight = Math.max(96, Math.min(height - (hasReadout ? 235 : 175), 360));
@@ -26,17 +35,17 @@ function PanelFlow({ beat, viewportSize }) {
   const showConnectors = panels.length > 1;
 
   return (
-    <div className="panel-flow" style={{ '--cell-size': `${cellSize}px` }}>
+    <div className="panel-flow" style={{ '--cell-size': `${cellSize}px` } as CSSProperties}>
       <div className="panel-row">
         {panels.map((panel, i) => (
-          <React.Fragment key={`${panel.key}-${i}`}>
+          <Fragment key={`${panel.key}-${i}`}>
             <MatrixPanel panel={panel} cellSize={cellSize} index={i} />
             {showConnectors && i < panels.length - 1 && (
               <div className="panel-connector" aria-hidden="true">
                 <span>{beat.connectors?.[i] || '→'}</span>
               </div>
             )}
-          </React.Fragment>
+          </Fragment>
         ))}
         {!panels.length && (
           <div className="empty-panel-flow">
@@ -45,24 +54,38 @@ function PanelFlow({ beat, viewportSize }) {
           </div>
         )}
       </div>
-      {hasReadout && (
-        <div className={`stage-readout readout-${beat.readout.tone || 'live'}`}>
-          <span className="readout-eyebrow">{beat.readout.label}</span>
-          <strong className={beat.readout.value.length > 18 ? 'readout-value small' : 'readout-value'}>
-            {beat.readout.value}
+      {readout && (
+        <div className={`stage-readout readout-${readout.tone || 'live'}`}>
+          <span className="readout-eyebrow">{readout.label}</span>
+          <strong className={readout.value.length > 18 ? 'readout-value small' : 'readout-value'}>
+            {readout.value}
           </strong>
-          <span className="readout-note">{beat.readout.note}</span>
+          <span className="readout-note">{readout.note}</span>
         </div>
       )}
       {beat.isFinale && !hasReadout && (
         <div className="finale-plaque">
           <span>FINAL EXPRESSION / 最简表达</span>
-          <strong>{beat.lens?.equation}</strong>
-          <em>{beat.lens?.accumulator?.value || '形状与含义一同保留'}</em>
+          <strong>{beat.lens.equation}</strong>
+          <em>{beat.lens.accumulator?.value || '形状与含义一同保留'}</em>
         </div>
       )}
     </div>
   );
+}
+
+interface TheaterProps {
+  story: Story;
+  beats: FlatBeat[];
+  beatIndex: number;
+  playing: boolean;
+  speed: number;
+  onPlayToggle: () => void;
+  onStep: (delta: number) => void;
+  onSeek: (index: number) => void;
+  onSpeed: (speed: number) => void;
+  stale?: boolean;
+  expressionValid?: boolean;
 }
 
 export default function Theater({
@@ -77,30 +100,28 @@ export default function Theater({
   onSpeed,
   stale = false,
   expressionValid = true,
-}) {
+}: TheaterProps) {
   const [viewportRef, viewportSize] = useElementSize();
-  const beat = beats[beatIndex] || beats[0];
+  const beat = beats[beatIndex] ?? beats[0];
   const total = beats.length;
-  const chapter = story.chapters[beat?.chapterIndex] || story.chapters[0];
-  const chapterOffset = useMemo(
-    () =>
-      story.chapters.reduce(
-        (acc, ch, index) => {
-          acc[index] = acc[index - 1] != null ? acc[index - 1] + story.chapters[index - 1].beats.length : 0;
-          return acc;
-        },
-        {},
-      ),
-    [story],
-  );
-  const chapterNumber = (beat?.chapterIndex || 0) + 1;
-  const chapterBeatsBefore = chapterOffset[beat?.chapterIndex || 0] || 0;
+  const chapter = story.chapters[beat?.chapterIndex ?? 0] ?? story.chapters[0];
+  const chapterOffset = useMemo(() => {
+    const offsets: number[] = [];
+    let running = 0;
+    for (const chapterItem of story.chapters) {
+      offsets.push(running);
+      running += chapterItem.beats.length;
+    }
+    return offsets;
+  }, [story]);
+  const chapterNumber = (beat?.chapterIndex ?? 0) + 1;
+  const chapterBeatsBefore = chapterOffset[beat?.chapterIndex ?? 0] ?? 0;
   const beatInChapter = beatIndex - chapterBeatsBefore + 1;
-  const beatDuration = (beat?.duration || 1500) / speed;
+  const beatDuration = (beat?.duration ?? 1500) / speed;
   const progress = total > 1 ? (beatIndex / (total - 1)) * 100 : 100;
 
-  const seekChapter = (index) => {
-    if (onSeek) onSeek(chapterOffset[index]);
+  const seekChapter = (index: number): void => {
+    onSeek(chapterOffset[index] ?? 0);
   };
 
   return (
@@ -124,7 +145,7 @@ export default function Theater({
         <div className="shape-contract">
           <span>SHAPE CONTRACT</span>
           <strong>{story.meta.shapeChain}</strong>
-          <em>{beatInChapter} / {chapter?.beats.length} 帧 · 第 {chapterNumber} 幕</em>
+          <em>{beatInChapter} / {chapter?.beats.length ?? 0} 帧 · 第 {chapterNumber} 幕</em>
         </div>
       </header>
 
@@ -159,8 +180,8 @@ export default function Theater({
             <span>{beat?.narration}</span>
           </div>
         </div>
-        <PanelFlow beat={beat} viewportSize={viewportSize} />
-        <div className="beat-progress" key={beat?.id}>
+        {beat && <PanelFlow beat={beat} viewportSize={viewportSize} />}
+        <div className="beat-progress" key={beat?.id ?? 'empty'}>
           <span
             style={{
               animationDuration: `${beatDuration}ms`,
@@ -213,7 +234,7 @@ export default function Theater({
 
           <div className="transport-now">
             <span className="transport-pulse" />
-            <span>{beat?.readout?.note || beat?.lens?.kicker || '准备就绪'}</span>
+            <span>{beat?.readout?.note || beat?.lens.kicker || '准备就绪'}</span>
           </div>
 
           <label className="speed-control">

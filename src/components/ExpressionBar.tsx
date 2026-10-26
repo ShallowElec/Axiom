@@ -1,6 +1,9 @@
-import React, { useRef } from 'react';
-import { insertAtCursor } from '../engine/expression.js';
-import { Icon } from './Icons.jsx';
+import { useRef } from 'react';
+import type { FormEvent } from 'react';
+import { insertAtCursor } from '../core/expression.js';
+import type { ExpressionAnalysis } from '../core/expression.js';
+import type { Matrix } from '../core/matrix.js';
+import { Icon } from './Icons';
 
 const OPERATORS = [
   { label: '+', insert: ' + ', title: '矩阵加法' },
@@ -22,6 +25,17 @@ const FUNCTIONS = [
   { label: 'solve', insert: 'solve(, )', caretBack: 3, title: '解线性方程组' },
 ];
 
+interface ExpressionBarProps {
+  expression: string;
+  setExpression: (value: string) => void;
+  matrices: readonly Matrix[];
+  analysis: ExpressionAnalysis;
+  onRun: () => void;
+  onOpenExamples: () => void;
+  onOpenTemplates: () => void;
+  onOpenOps: () => void;
+}
+
 export default function ExpressionBar({
   expression,
   setExpression,
@@ -31,10 +45,10 @@ export default function ExpressionBar({
   onOpenExamples,
   onOpenTemplates,
   onOpenOps,
-}) {
-  const inputRef = useRef(null);
+}: ExpressionBarProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const insert = (text, caretBack = 0) => {
+  const insert = (text: string, caretBack = 0): void => {
     const el = inputRef.current;
     const start = el?.selectionStart ?? expression.length;
     const end = el?.selectionEnd ?? expression.length;
@@ -48,7 +62,7 @@ export default function ExpressionBar({
     });
   };
 
-  const insertMatrixToken = (name) => {
+  const insertMatrixToken = (name: string): void => {
     const el = inputRef.current;
     const start = el?.selectionStart ?? expression.length;
     const before = expression.slice(0, start).trimEnd();
@@ -56,9 +70,9 @@ export default function ExpressionBar({
     insert(needsOperator ? ` + ${name} ` : `${name} `);
   };
 
-  const submit = (event) => {
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (analysis?.ok) onRun();
+    if (analysis.ok) onRun();
   };
 
   return (
@@ -68,7 +82,7 @@ export default function ExpressionBar({
           <span className="micro-label">EXPRESSION<span className="expr-cn"> / 现场表达式</span></span>
           <span className="expression-hint">把矩阵对象用运算符连接起来</span>
         </div>
-        <div className={`expression-field ${analysis && !analysis.ok ? 'has-error' : ''}`}>
+        <div className={`expression-field ${!analysis.ok ? 'has-error' : ''}`}>
           <span className="expression-prefix">ƒ</span>
           <input
             ref={inputRef}
@@ -95,20 +109,20 @@ export default function ExpressionBar({
           )}
         </div>
         <div className="expression-status">
-          {analysis?.ok ? (
+          {analysis.ok ? (
             <div className="parse-ok">
               <span className="status-dot ok" />
               <span>{analysis.kind === 'matrix' ? `结果 ${analysis.shape.rows}×${analysis.shape.cols}` : '结果：标量'}</span>
               <span className="parse-ops">{analysis.opCount} 次运算</span>
             </div>
           ) : (
-            <div className="parse-error" title={analysis?.error}>
+            <div className="parse-error" title={analysis.error}>
               <span className="status-dot error" />
-              <span>{analysis?.error || '输入一个表达式'}</span>
+              <span>{analysis.error}</span>
             </div>
           )}
         </div>
-        <button type="submit" className="run-button" disabled={!analysis?.ok}>
+        <button type="submit" className="run-button" disabled={!analysis.ok}>
           <span className="run-button-pulse">
             <Icon name="play" size={14} />
           </span>

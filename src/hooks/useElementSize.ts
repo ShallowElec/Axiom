@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 
-export function useElementSize() {
-  const ref = useRef(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+export interface ElementSize {
+  width: number;
+  height: number;
+}
+
+export function useElementSize<T extends HTMLElement = HTMLDivElement>(): [RefObject<T | null>, ElementSize] {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState<ElementSize>({ width: 0, height: 0 });
 
   useEffect(() => {
     const el = ref.current;

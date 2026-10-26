@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { OPS_REFERENCE } from '../data/seed.js';
-import { analyzeExpression } from '../engine/expression.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { OPS_REFERENCE } from '../content/library.js';
+import type { OperationReferenceItem } from '../content/library.js';
+import { analyzeExpression } from '../core/expression.js';
 import {
   characteristicPolynomial,
   cleanFloat,
@@ -9,15 +10,43 @@ import {
   formatEigen,
   frobeniusNorm,
   luDecompose,
-  matrixToText,
   nullspace,
   outer,
   qrDecompose,
-} from '../engine/matrix.js';
-import { Modal, ModalHeader } from './Modal.jsx';
-import { Icon } from './Icons.jsx';
+} from '../core/matrix.js';
+import type { Matrix, StoredMatrix } from '../core/matrix.js';
+import type { Q } from '../core/rational.js';
+import { Modal, ModalHeader } from './Modal';
+import { Icon } from './Icons';
 
-function expressionForCode(code, first, second, vector) {
+interface MatrixTextData {
+  rows: number;
+  cols: number;
+  data: readonly (readonly (Q | number)[])[];
+}
+
+interface TrayValue {
+  label: string;
+  value: string;
+}
+
+interface TrayMatrix {
+  name: string;
+  shape: string;
+  text: string;
+}
+
+interface AdvancedReadout {
+  title?: string;
+  note?: string;
+  numeric?: boolean;
+  values?: TrayValue[];
+  matrices?: TrayMatrix[];
+  extras?: string[];
+  error?: string;
+}
+
+function expressionForCode(code: string, first?: Matrix, second?: Matrix, vector?: Matrix): string | null {
   const a = first?.name;
   const vectorName = second?.cols === 1 ? second.name : vector?.name;
   switch (code) {
@@ -41,12 +70,14 @@ function expressionForCode(code, first, second, vector) {
   }
 }
 
-function matrixLines(matrix, name, numeric = false) {
-  const text = numeric
-    ? matrix.data
-        .map((row) => row.map((value) => cleanFloat(typeof value === 'number' ? value : value.toNumber())).join('\t'))
-        .join('\n')
-    : matrixToText(matrix);
+function matrixLines(matrix: MatrixTextData, name: string, numeric = false): TrayMatrix {
+  const text = matrix.data
+    .map((row) =>
+      row
+        .map((value) => (numeric ? cleanFloat(typeof value === 'number' ? value : value.toNumber()) : (value as Q).toString()))
+        .join('\t'),
+    )
+    .join('\n');
   return {
     name,
     shape: `${matrix.rows}×${matrix.cols}`,
@@ -54,8 +85,8 @@ function matrixLines(matrix, name, numeric = false) {
   };
 }
 
-function polynomialString(coeffs) {
-  const terms = [];
+function polynomialString(coeffs: readonly Q[]): string {
+  const terms: string[] = [];
   coeffs.forEach((value, index) => {
     if (value.isZero) return;
     const power = coeffs.length - 1 - index;
@@ -68,7 +99,7 @@ function polynomialString(coeffs) {
   return terms.length ? terms.join(' ') : '0';
 }
 
-function computeAdvanced(code, first, matrices, second) {
+function computeAdvanced(code: string, first?: Matrix, _matrices?: readonly Matrix[], second?: Matrix): AdvancedReadout {
   if (!first) return { error: '请选择一个矩阵' };
   try {
     if (code === 'dot') {
@@ -166,17 +197,31 @@ function computeAdvanced(code, first, matrices, second) {
     }
     return { error: '这个读数还没有接入。' };
   } catch (error) {
-    return { error: error.message };
+    return { error: error instanceof Error ? error.message : '读数计算失败' };
   }
 }
 
-export default function OpsModal({ open, matrices, onClose, onLaunchExpression, onOpenBlock }) {
+interface OpsModalProps {
+  open: boolean;
+  matrices: readonly StoredMatrix[];
+  onClose: () => void;
+  onLaunchExpression: (expression: string, meta?: { title?: string; eyebrow?: string }) => void;
+  onOpenBlock: () => void;
+}
+
+export default function OpsModal({
+  open,
+  matrices,
+  onClose,
+  onLaunchExpression,
+  onOpenBlock,
+}: OpsModalProps) {
   const [group, setGroup] = useState('全部');
   const [first, setFirst] = useState('');
   const [second, setSecond] = useState('');
-  const [error, setError] = useState(null);
-  const [advanced, setAdvanced] = useState(null);
-  const catalogRef = useRef(null);
+  const [error, setError] = useState<string | null>(null);
+  const [advanced, setAdvanced] = useState<AdvancedReadout | null>(null);
+  const catalogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -198,13 +243,13 @@ export default function OpsModal({ open, matrices, onClose, onLaunchExpression, 
 
   if (!open) return null;
 
-  const revealTray = () => {
+  const revealTray = (): void => {
     requestAnimationFrame(() => {
       catalogRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     });
   };
 
-  const handleOperation = (item) => {
+  const handleOperation = (item: OperationReferenceItem): void => {
     setError(null);
     setAdvanced(null);
     if (item.code === 'block') {
@@ -229,8 +274,8 @@ export default function OpsModal({ open, matrices, onClose, onLaunchExpression, 
       if (!chosenSecond || chosenSecond.cols !== 1) chosenSecond = vectors[0];
     }
 
-    if (chosenFirst !== firstMatrix) setFirst(chosenFirst?.name || '');
-    if (chosenSecond !== secondMatrix) setSecond(chosenSecond?.name || '');
+    if (chosenFirst !== firstMatrix) setFirst(chosenFirst?.name ?? '');
+    if (chosenSecond !== secondMatrix) setSecond(chosenSecond?.name ?? '');
 
     if (item.advanced) {
       setAdvanced(computeAdvanced(item.code, chosenFirst, matrices, chosenSecond));
@@ -300,7 +345,7 @@ export default function OpsModal({ open, matrices, onClose, onLaunchExpression, 
           </div>
         </aside>
 
-        <section className="ops-catalog" ref={catalogRef}>
+        <section className="ops-catalog" ref={catalogRef as React.RefObject<HTMLElement>}>
           {(error || advanced) && (
             <div className={`ops-tray ${error ? 'is-error' : ''}`}>
               {error && (

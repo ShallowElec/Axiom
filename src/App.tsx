@@ -1,30 +1,57 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { analyzeExpression } from './engine/expression.js';
-import { matrixFromRows } from './engine/matrix.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { analyzeExpression } from './core/expression.js';
+import { matrixFromRows } from './core/matrix.js';
+import type { StoredMatrix } from './core/matrix.js';
 import {
   buildBlockStory,
   buildStoryFromExpression,
   flattenBeats,
-} from './engine/stories.js';
-import { seedObjects, libraryFrom, EXPRESSION_EXAMPLES } from './data/seed.js';
-import LibraryPanel from './components/LibraryPanel.jsx';
-import ExpressionBar from './components/ExpressionBar.jsx';
-import Theater from './components/Theater.jsx';
-import Inspector from './components/Inspector.jsx';
-import MatrixEditorModal from './components/MatrixEditorModal.jsx';
-import TemplateModal from './components/TemplateModal.jsx';
-import BlockModal from './components/BlockModal.jsx';
-import OpsModal from './components/OpsModal.jsx';
-import { Modal, ModalHeader } from './components/Modal.jsx';
-import { Icon } from './components/Icons.jsx';
+} from './presentation/stories.js';
+import type { FlatBeat, Story } from './presentation/storyTypes.js';
+import type { BuildStoryOptions } from './presentation/storyTypes.js';
+import { seedObjects, libraryFrom, EXPRESSION_EXAMPLES } from './content/library.js';
+import type { FormulaTemplate } from './content/library.js';
+import LibraryPanel from './components/LibraryPanel';
+import ExpressionBar from './components/ExpressionBar';
+import Theater from './components/Theater';
+import Inspector from './components/Inspector';
+import MatrixEditorModal from './components/MatrixEditorModal';
+import TemplateModal from './components/TemplateModal';
+import BlockModal from './components/BlockModal';
+import OpsModal from './components/OpsModal';
+import { Modal, ModalHeader } from './components/Modal';
+import { Icon } from './components/Icons';
+import type { MatrixDraft, BlockBuildPayload, ToastMessage, WorkspaceMatrix } from './workspace/types.js';
 
 const STORAGE_KEY = 'matrix-atelier.workspace.v1';
 
-function withShape(matrix) {
+interface SerializedMatrix {
+  id: string;
+  name: string;
+  note: string;
+  rows: number;
+  cols: number;
+  data: string[][];
+}
+
+interface BootState {
+  objects: WorkspaceMatrix[];
+  expression: string;
+  story: Story;
+  speed: number;
+}
+
+interface RunOptions {
+  autoPlay?: boolean;
+  toast?: string | null;
+  storyOptions?: BuildStoryOptions;
+}
+
+function withShape<T extends { rows: number; cols: number }>(matrix: T): T & { shape: string } {
   return { ...matrix, shape: `${matrix.rows}×${matrix.cols}` };
 }
 
-function serializeObjects(objects) {
+function serializeObjects(objects: readonly WorkspaceMatrix[]): SerializedMatrix[] {
   return objects.map((matrix) => ({
     id: matrix.id,
     name: matrix.name,
@@ -35,47 +62,52 @@ function serializeObjects(objects) {
   }));
 }
 
-function hydrateObjects(raw) {
+function hydrateObjects(raw: unknown): WorkspaceMatrix[] {
   if (!Array.isArray(raw) || !raw.length) throw new Error('没有可用的矩阵');
-  const seen = new Set();
+  const seen = new Set<string>();
   return raw.map((entry) => {
-    if (!entry || !entry.name || !Array.isArray(entry.data)) throw new Error('矩阵数据损坏');
-    if (seen.has(entry.name)) throw new Error(`矩阵名字重复：${entry.name}`);
-    seen.add(entry.name);
-    const matrix = matrixFromRows(entry.data, entry.name);
+    const candidate = entry as Partial<SerializedMatrix>;
+    if (!candidate || typeof candidate.name !== 'string' || !Array.isArray(candidate.data)) {
+      throw new Error('矩阵数据损坏');
+    }
+    if (seen.has(candidate.name)) throw new Error(`矩阵名字重复：${candidate.name}`);
+    seen.add(candidate.name);
+    const matrix = matrixFromRows(candidate.data, candidate.name);
     return withShape({
       ...matrix,
-      id: entry.id || `restored-${entry.name}-${Math.random().toString(36).slice(2, 7)}`,
-      note: entry.note || '恢复的矩阵对象',
+      id: candidate.id || `restored-${candidate.name}-${Math.random().toString(36).slice(2, 7)}`,
+      note: candidate.note || '恢复的矩阵对象',
     });
   });
 }
 
-function createBootState() {
-  let objects = seedObjects().map(withShape);
+function createBootState(): BootState {
+  let objects = seedObjects().map(withShape) as WorkspaceMatrix[];
   let expression = 'A × B';
   let speed = 1;
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (raw?.matrices?.length) {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') as
+      | { matrices?: unknown; expression?: unknown; speed?: unknown }
+      | null;
+    if (Array.isArray(raw?.matrices) && raw.matrices.length) {
       try {
         objects = hydrateObjects(raw.matrices);
-        expression = raw.expression || 'A × B';
+        expression = typeof raw.expression === 'string' ? raw.expression : 'A × B';
         speed = Number(raw.speed) || 1;
       } catch {
-        objects = seedObjects().map(withShape);
+        objects = seedObjects().map(withShape) as WorkspaceMatrix[];
         expression = 'A × B';
       }
     }
   } catch {
     // A broken local snapshot should never block the atelier from opening.
   }
-  let story;
+  let story: Story;
   try {
     story = buildStoryFromExpression(expression, libraryFrom(objects));
   } catch {
-    const fallback = objects.find((m) => m.name === 'A') || objects[0];
-    expression = fallback?.name || 'A';
+    const fallback = objects.find((matrix) => matrix.name === 'A') ?? objects[0];
+    expression = fallback?.name ?? 'A';
     try {
       story = buildStoryFromExpression(expression, libraryFrom(objects));
     } catch {
@@ -85,8 +117,8 @@ function createBootState() {
   return { objects, expression, story, speed };
 }
 
-function nextMatrixName(objects) {
-  const used = new Set(objects.map((m) => m.name));
+function nextMatrixName(objects: readonly WorkspaceMatrix[]): string {
+  const used = new Set(objects.map((matrix) => matrix.name));
   for (const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
     if (!used.has(letter)) return letter;
   }
@@ -95,8 +127,8 @@ function nextMatrixName(objects) {
   return `M${index}`;
 }
 
-function nextBlockName(objects) {
-  const used = new Set(objects.map((m) => m.name));
+function nextBlockName(objects: readonly WorkspaceMatrix[]): string {
+  const used = new Set(objects.map((matrix) => matrix.name));
   for (const base of ['K', 'P', 'Q', 'R', 'S']) {
     if (!used.has(base)) return base;
   }
@@ -105,59 +137,65 @@ function nextBlockName(objects) {
   return `K${index}`;
 }
 
-function makeId() {
+function makeId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function escapeRegExp(text) {
+function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function replaceIdentifier(expression, oldName, newName) {
+function replaceIdentifier(expression: string, oldName: string, newName: string): string {
   if (oldName === newName) return expression;
   const re = new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(oldName)}(?![A-Za-z0-9_])`, 'g');
   return expression.replace(re, newName);
 }
 
 export default function App() {
-  const bootRef = useRef(null);
+  const bootRef = useRef<BootState | null>(null);
   if (!bootRef.current) bootRef.current = createBootState();
   const boot = bootRef.current;
 
-  const [objects, setObjects] = useState(boot.objects);
+  const [objects, setObjects] = useState<WorkspaceMatrix[]>(boot.objects);
   const [expression, setExpression] = useState(boot.expression);
-  const [story, setStory] = useState(boot.story);
+  const [story, setStory] = useState<Story>(boot.story);
   const [beatIndex, setBeatIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(boot.speed);
-  const [editor, setEditor] = useState({ open: false, matrix: null });
+  const [editor, setEditor] = useState<{ open: boolean; matrix: StoredMatrix | null }>({
+    open: false,
+    matrix: null,
+  });
   const [templateOpen, setTemplateOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [savedStoryId, setSavedStoryId] = useState(null);
-  const toastTimer = useRef(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
 
   const library = useMemo(() => libraryFrom(objects), [objects]);
   const analysis = useMemo(() => {
-    if (!expression.trim()) return { ok: false, error: '写一个表达式，或从矩阵库插入一个对象' };
+    if (!expression.trim()) {
+      return { ok: false as const, error: '写一个表达式，或从矩阵库插入一个对象', input: expression };
+    }
     return analyzeExpression(expression, library);
   }, [expression, library]);
   const beats = useMemo(() => flattenBeats(story), [story]);
   const suggestedName = useMemo(() => nextMatrixName(objects), [objects]);
   const blockNameSuggestion = useMemo(() => nextBlockName(objects), [objects]);
-  const currentBeat = beats[beatIndex] || beats[0];
+  const currentBeat: FlatBeat = beats[beatIndex] ?? beats[0]!;
   const anyModalOpen = editor.open || templateOpen || blockOpen || opsOpen || examplesOpen;
-  const canonical = (value) => String(value || '').replace(/\s+/g, '').replace(/×/g, '*').replace(/−/g, '-');
+  const canonical = (value: string): string =>
+    String(value || '').replace(/\s+/g, '').replace(/×/g, '*').replace(/−/g, '-');
   const stale =
     Boolean(story.inputExpression) &&
     canonical(expression) !== canonical(story.inputExpression) &&
     !(story.source === 'block' && expression === story.inputExpression);
 
-  const showToast = useCallback((message, type = 'info') => {
+  const showToast = useCallback((message: string, type: 'info' | 'error' = 'info'): void => {
     setToast({ message, type, id: Date.now() });
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 3200);
   }, []);
 
@@ -199,7 +237,7 @@ export default function App() {
   }, [playing, beatIndex, beats.length]);
 
   const stepFrame = useCallback(
-    (delta) => {
+    (delta: number): void => {
       setPlaying(false);
       setBeatIndex((current) => Math.max(0, Math.min(beats.length - 1, current + delta)));
     },
@@ -207,7 +245,7 @@ export default function App() {
   );
 
   const seekBeat = useCallback(
-    (index) => {
+    (index: number): void => {
       setPlaying(false);
       setBeatIndex(Math.max(0, Math.min(beats.length - 1, Number(index) || 0)));
     },
@@ -215,7 +253,7 @@ export default function App() {
   );
 
   const jumpChapter = useCallback(
-    (chapterIndex) => {
+    (chapterIndex: number): void => {
       setPlaying(false);
       let count = 0;
       for (let i = 0; i < chapterIndex; i++) count += story.chapters[i].beats.length;
@@ -225,7 +263,7 @@ export default function App() {
   );
 
   const runExpression = useCallback(
-    (value = expression, options = {}) => {
+    (value: string = expression, options: RunOptions = {}): boolean => {
       const trimmed = String(value).trim();
       if (!trimmed) {
         showToast('先写一个矩阵表达式。', 'error');
@@ -240,19 +278,19 @@ export default function App() {
         if (options.toast) showToast(options.toast);
         return true;
       } catch (error) {
-        showToast(error.message || '这个表达式还无法开演。', 'error');
+        showToast(error instanceof Error ? error.message : '这个表达式还无法开演。', 'error');
         return false;
       }
     },
     [expression, library, showToast],
   );
 
-  const handleRun = () => {
+  const handleRun = (): void => {
     if (!analysis.ok) return;
     runExpression(expression, { toast: '表达式已装入演示台' });
   };
 
-  const insertMatrix = (name) => {
+  const insertMatrix = (name: string): void => {
     setExpression((current) => {
       const text = current.trimEnd();
       if (!text) return name;
@@ -261,11 +299,12 @@ export default function App() {
     });
   };
 
-  const openNewMatrix = () => setEditor({ open: true, matrix: null });
-  const openEditMatrix = (matrix) => setEditor({ open: true, matrix });
+  const openNewMatrix = (): void => setEditor({ open: true, matrix: null });
+  const openEditMatrix = (matrix: StoredMatrix): void => setEditor({ open: true, matrix });
 
-  const handleSaveMatrix = (draft) => {
-    const isEdit = Boolean(editor.matrix);
+  const handleSaveMatrix = (draft: MatrixDraft): void => {
+    const editing = editor.matrix;
+    const isEdit = Boolean(editing);
     const matrixData = {
       name: draft.name,
       rows: draft.rows,
@@ -273,15 +312,16 @@ export default function App() {
       data: draft.data,
     };
     if (isEdit) {
-      const oldName = editor.matrix.name;
+      if (!editing) return;
+      const oldName = editing.name;
       const updated = withShape({
-        ...editor.matrix,
+        ...editing,
         ...matrixData,
         name: draft.name,
         note: draft.note,
-        id: editor.matrix.id || makeId(),
+        id: editing.id || makeId(),
       });
-      const nextObjects = objects.map((m) => (m.id === editor.matrix.id ? updated : m));
+      const nextObjects = objects.map((matrix) => (matrix.id === editing.id ? updated : matrix));
       let nextExpression = expression;
       try {
         if (oldName !== draft.name) nextExpression = replaceIdentifier(expression, oldName, draft.name);
@@ -299,7 +339,7 @@ export default function App() {
         }
         showToast(`矩阵 ${updated.name} 已更新`);
       } catch (error) {
-        showToast(error.message, 'error');
+        showToast(error instanceof Error ? error.message : '矩阵更新失败', 'error');
       } finally {
         setEditor({ open: false, matrix: null });
       }
@@ -316,17 +356,17 @@ export default function App() {
     showToast(`矩阵 ${created.name} 已放入矩阵库`);
   };
 
-  const handleDeleteMatrix = (matrix) => {
+  const handleDeleteMatrix = (matrix: StoredMatrix): void => {
     if (objects.length <= 1) {
       showToast('至少保留一个矩阵对象。', 'error');
       return;
     }
     if (!window.confirm(`删除矩阵 ${matrix.name}？引用它的表达式会失效。`)) return;
-    const remaining = objects.filter((m) => m.id !== matrix.id);
+    const remaining = objects.filter((candidate) => candidate.id !== matrix.id);
     const wasUsed = new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(matrix.name)}(?![A-Za-z0-9_])`).test(expression);
     let nextExpression = expression;
     if (wasUsed || !analyzeExpression(expression, libraryFrom(remaining)).ok) {
-      nextExpression = remaining[0].name;
+      nextExpression = remaining[0]?.name ?? nextExpression;
     }
     const nextLibrary = libraryFrom(remaining);
     let nextStory = story;
@@ -335,7 +375,7 @@ export default function App() {
     } catch {
       try {
         nextStory = buildStoryFromExpression(remaining[0].name, nextLibrary);
-        nextExpression = remaining[0].name;
+        nextExpression = remaining[0]?.name ?? nextExpression;
       } catch {
         // Ignore; the remaining library still has at least one valid object.
       }
@@ -349,9 +389,9 @@ export default function App() {
     showToast(`已删除矩阵 ${matrix.name}`);
   };
 
-  const handleReset = () => {
+  const handleReset = (): void => {
     if (!window.confirm('重置矩阵库与当前表达式？本地保存的实验会被清空。')) return;
-    const fresh = seedObjects().map(withShape);
+    const fresh = seedObjects().map(withShape) as WorkspaceMatrix[];
     const freshStory = buildStoryFromExpression('A × B', libraryFrom(fresh));
     setObjects(fresh);
     setExpression('A × B');
@@ -361,7 +401,7 @@ export default function App() {
     showToast('已回到初始实验');
   };
 
-  const handleExport = () => {
+  const handleExport = (): void => {
     const payload = {
       app: '矩阵工坊 / Matrix Atelier',
       version: 1,
@@ -384,7 +424,7 @@ export default function App() {
     showToast('实验快照已导出');
   };
 
-  const launchTemplate = (templateExpression, template) => {
+  const launchTemplate = (templateExpression: string, template: FormulaTemplate): void => {
     setTemplateOpen(false);
     const ok = runExpression(templateExpression, {
       toast: null,
@@ -399,7 +439,10 @@ export default function App() {
     if (ok) showToast(`已装填「${template.title}」并开始演示`);
   };
 
-  const launchOpsExpression = (value, meta = {}) => {
+  const launchOpsExpression = (
+    value: string,
+    meta: { title?: string; eyebrow?: string } = {},
+  ): void => {
     setOpsOpen(false);
     const ok = runExpression(value, {
       toast: null,
@@ -413,7 +456,7 @@ export default function App() {
     if (ok) showToast(`已装填 ${value}`);
   };
 
-  const saveStoryResult = () => {
+  const saveStoryResult = (): void => {
     const result = story.resultValue;
     if (!result || result.kind !== 'matrix') {
       showToast('这次结果是一个标量，没有可入库的行列对象。', 'error');
@@ -437,8 +480,11 @@ export default function App() {
     showToast(`结果已存为矩阵 ${name}，可继续插入表达式或参与分块。`);
   };
 
-  const handleBlockBuild = ({ name, grid, built, rows, cols }) => {
-    const sourceNames = grid.flat().filter(Boolean).map((m) => m.name);
+  const handleBlockBuild = ({ name, grid, built }: BlockBuildPayload): void => {
+    const sourceNames = grid
+      .flat()
+      .filter((matrix): matrix is NonNullable<typeof matrix> => Boolean(matrix))
+      .map((matrix) => matrix.name);
     const newMatrix = withShape({
       ...built.matrix,
       name,
@@ -463,9 +509,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    const onKeyDown = (event) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       const target = event.target;
-      if (target?.closest?.('input, textarea, select, button, [contenteditable="true"]')) return;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, button, [contenteditable="true"]')) return;
       if (anyModalOpen) return;
       if (event.code === 'Space') {
         event.preventDefault();
@@ -473,7 +519,7 @@ export default function App() {
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault();
         if (event.shiftKey) {
-          const current = currentBeat?.chapterIndex || 0;
+          const current = currentBeat.chapterIndex;
           jumpChapter(Math.max(0, current - 1));
         } else {
           stepFrame(-1);
@@ -481,7 +527,7 @@ export default function App() {
       } else if (event.key === 'ArrowRight') {
         event.preventDefault();
         if (event.shiftKey) {
-          const current = currentBeat?.chapterIndex || 0;
+          const current = currentBeat.chapterIndex;
           jumpChapter(Math.min(story.chapters.length - 1, current + 1));
         } else {
           stepFrame(1);
@@ -496,14 +542,12 @@ export default function App() {
     <div className={`app-shell platform-${window.desktop?.platform || 'web'}`}>
       <LibraryPanel
         matrices={objects}
-        stories={[]}
         onCreate={openNewMatrix}
         onEdit={openEditMatrix}
         onInsert={insertMatrix}
         onOpenBlock={() => setBlockOpen(true)}
         onReset={handleReset}
         onExport={handleExport}
-        activeExpression={expression}
       />
 
       <main className="workspace">
@@ -565,7 +609,7 @@ export default function App() {
               Boolean(story.resultValue.matrix) &&
               story.source !== 'block' &&
               savedStoryId !== story.id &&
-              Boolean(currentBeat?.isFinale)
+              currentBeat.isFinale
             }
           />
         </div>

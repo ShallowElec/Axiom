@@ -1,7 +1,7 @@
-import React from 'react';
-import { Icon } from './Icons.jsx';
+import { Icon } from './Icons';
+import type { FlatBeat, LensTerm, Story } from '../presentation/storyTypes.js';
 
-function TermList({ terms = [] }) {
+function TermList({ terms = [] }: { terms?: LensTerm[] }) {
   if (!terms.length) return null;
   return (
     <div className="lens-terms">
@@ -17,13 +17,31 @@ function TermList({ terms = [] }) {
   );
 }
 
-export default function Inspector({ story, beat, beatIndex, beats, onJumpChapter, onSaveResult, canSaveResult = false }) {
+interface InspectorProps {
+  story: Story;
+  beat: FlatBeat;
+  beatIndex: number;
+  beats: readonly FlatBeat[];
+  onJumpChapter: (index: number) => void;
+  onSaveResult: () => void;
+  canSaveResult?: boolean;
+}
+
+export default function Inspector({
+  story,
+  beat,
+  beatIndex,
+  beats,
+  onJumpChapter,
+  onSaveResult,
+  canSaveResult = false,
+}: InspectorProps) {
   if (!beat) return null;
-  const lens = beat.lens || {};
+  const lens = beat.lens;
   const chapter = story.chapters[beat.chapterIndex];
+  if (!chapter) return null;
   const chapterStart = beats.findIndex((b) => b.chapterIndex === beat.chapterIndex);
   const chapterBeats = beats.filter((b) => b.chapterIndex === beat.chapterIndex);
-  const indexInChapter = beatIndex - chapterStart + 1;
   const isFinale = beat.isFinale;
 
   return (

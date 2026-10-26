@@ -1,7 +1,9 @@
-import React from 'react';
-import { formatCompact } from '../engine/rational.js';
+import type { CSSProperties } from 'react';
+import { formatCompact } from '../core/rational.js';
+import type { Matrix } from '../core/matrix.js';
+import type { StoryPanel } from '../presentation/storyTypes.js';
 
-function Fraction({ text }) {
+function Fraction({ text }: { text: string }) {
   const normalized = text.replace(/^-/, '−');
   const match = normalized.match(/^([−-]?\d+)\/(\d+)$/);
   if (!match) return <span className="cell-number">{normalized}</span>;
@@ -14,14 +16,20 @@ function Fraction({ text }) {
   );
 }
 
-function CellValue({ text, cellSize }) {
+function CellValue({ text, cellSize }: { text: string; cellSize: number }) {
   if (cellSize < 34) {
     return <span className="cell-number compact-number">{text.replace(/^-/, '−')}</span>;
   }
   return <Fraction text={String(text)} />;
 }
 
-export default function MatrixPanel({ panel, cellSize = 46, index = 0 }) {
+interface MatrixPanelProps {
+  panel: StoryPanel;
+  cellSize?: number;
+  index?: number;
+}
+
+export default function MatrixPanel({ panel, cellSize = 46, index = 0 }: MatrixPanelProps) {
   const { matrix, label, cells = {}, rowFocus = [], colFocus = [], dividerAfter, role, caption, shape } = panel;
   const fontSize = Math.max(11, Math.min(19, Math.round(cellSize * 0.37)));
   const showAxis = cellSize >= 27;
@@ -36,11 +44,13 @@ export default function MatrixPanel({ panel, cellSize = 46, index = 0 }) {
 
       <div
         className="matrix-frame"
-        style={{
-          '--cell-size': `${cellSize}px`,
-          '--cell-font': `${fontSize}px`,
-          '--axis-height': `${axisHeight}px`,
-        }}
+        style={
+          {
+            '--cell-size': `${cellSize}px`,
+            '--cell-font': `${fontSize}px`,
+            '--axis-height': `${axisHeight}px`,
+          } as CSSProperties
+        }
       >
         {showAxis && (
           <div className="matrix-col-axis" style={{ paddingLeft: 20, gridTemplateColumns: `repeat(${matrix.cols}, ${cellSize}px)` }}>
@@ -114,11 +124,20 @@ export default function MatrixPanel({ panel, cellSize = 46, index = 0 }) {
   );
 }
 
-export function MatrixMini({ matrix, max = 3, variant = 'light' }) {
+interface MatrixMiniProps {
+  matrix: Matrix;
+  max?: number;
+  variant?: 'light' | 'dark';
+}
+
+export function MatrixMini({ matrix, max = 3, variant = 'light' }: MatrixMiniProps) {
   const rows = Math.min(matrix.rows, max);
   const cols = Math.min(matrix.cols, max);
   return (
-    <div className={`matrix-mini ${variant}`} style={{ '--mini-cols': cols }}>
+    <div
+      className={`matrix-mini ${variant}`}
+      style={{ '--mini-cols': cols } as CSSProperties}
+    >
       <span className="mini-bracket left" />
       <div className="mini-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
         {Array.from({ length: rows * cols }, (_, i) => {

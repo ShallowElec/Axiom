@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { concatBlocks } from '../engine/matrix.js';
-import { Modal, ModalHeader } from './Modal.jsx';
-import { Icon } from './Icons.jsx';
-import { MatrixMini } from './MatrixPanel.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { concatBlocks } from '../core/matrix.js';
+import type { BlockAssembly, Matrix, StoredMatrix } from '../core/matrix.js';
+import type { BlockBuildPayload } from '../workspace/types.js';
+import { Modal, ModalHeader } from './Modal';
+import { Icon } from './Icons';
+import { MatrixMini } from './MatrixPanel';
 
-function rowsCandidateGalleries(matrices) {
+function rowsCandidateGalleries(matrices: readonly StoredMatrix[]): Map<number, StoredMatrix[]> {
   const byHeight = new Map();
   for (const matrix of matrices) {
     if (!byHeight.has(matrix.rows)) byHeight.set(matrix.rows, []);
@@ -13,12 +15,12 @@ function rowsCandidateGalleries(matrices) {
   return byHeight;
 }
 
-function autoLayout(matrices, rows, cols) {
+function autoLayout(matrices: readonly StoredMatrix[], rows: number, cols: number): string[][] {
   if (!matrices.length) return Array.from({ length: rows }, () => Array(cols).fill(''));
   const byName = new Map(matrices.map((m) => [m.name, m]));
-  const isValid = (names) => {
+  const isValid = (names: string[][]): boolean => {
     try {
-      concatBlocks(names.map((row) => row.map((name) => byName.get(name))));
+      concatBlocks(names.map((row) => row.map((name) => byName.get(name) ?? null)));
       return true;
     } catch {
       return false;
@@ -53,17 +55,36 @@ function autoLayout(matrices, rows, cols) {
   return Array.from({ length: rows }, () => Array(cols).fill(matrices[0].name));
 }
 
-function resolveGrid(selection, matrices) {
+function resolveGrid(selection: string[][], matrices: readonly StoredMatrix[]): (Matrix | null)[][] {
   return selection.map((row) => row.map((name) => matrices.find((m) => m.name === name) || null));
 }
 
-export default function BlockModal({ open, matrices, nameSuggestion, onClose, onBuild }) {
-  const [layout, setLayout] = useState('h');
+interface BlockModalProps {
+  open: boolean;
+  matrices: readonly StoredMatrix[];
+  nameSuggestion: string;
+  onClose: () => void;
+  onBuild: (payload: BlockBuildPayload) => void;
+}
+
+interface BlockResult {
+  built: BlockAssembly | null;
+  error: string | null;
+}
+
+export default function BlockModal({
+  open,
+  matrices,
+  nameSuggestion,
+  onClose,
+  onBuild,
+}: BlockModalProps) {
+  const [layout, setLayout] = useState<'h' | 'v' | 'b' | 'custom'>('h');
   const [rows, setRows] = useState(1);
   const [cols, setCols] = useState(2);
-  const [selection, setSelection] = useState([]);
+  const [selection, setSelection] = useState<string[][]>([]);
   const [name, setName] = useState('');
-  const [nameError, setNameError] = useState(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -76,18 +97,20 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
   }, [open, matrices, nameSuggestion]);
 
   const grid = useMemo(() => resolveGrid(selection, matrices), [selection, matrices]);
-  const result = useMemo(() => {
+  const result = useMemo<BlockResult>(() => {
     try {
-      if (!grid.length || grid.flat().some((m) => !m)) return { error: '每个块位都需要一个矩阵。' };
-      return { built: concatBlocks(grid) };
+      if (!grid.length || grid.flat().some((matrix) => !matrix)) {
+        return { built: null, error: '每个块位都需要一个矩阵。' };
+      }
+      return { built: concatBlocks(grid), error: null };
     } catch (error) {
-      return { error: error.message };
+      return { built: null, error: error instanceof Error ? error.message : '块边界无法对齐。' };
     }
   }, [grid]);
 
   if (!open) return null;
 
-  const applyPreset = (preset) => {
+  const applyPreset = (preset: 'h' | 'v' | 'b'): void => {
     setLayout(preset);
     const nextRows = preset === 'h' ? 1 : 2;
     const nextCols = preset === 'v' ? 1 : 2;
@@ -96,22 +119,22 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
     setSelection(autoLayout(matrices, nextRows, nextCols));
   };
 
-  const changeDims = (nextRows, nextCols) => {
+  const changeDims = (nextRows: number, nextCols: number): void => {
     setRows(nextRows);
     setCols(nextCols);
     setLayout('custom');
     setSelection(autoLayout(matrices, nextRows, nextCols));
   };
 
-  const setSlot = (r, c, value) => {
+  const setSlot = (r: number, c: number, value: string): void => {
     setSelection((current) =>
       current.map((row, ri) => (ri === r ? row.map((cell, ci) => (ci === c ? value : cell)) : row)),
     );
   };
 
-  const refill = () => setSelection(autoLayout(matrices, rows, cols));
+  const refill = (): void => setSelection(autoLayout(matrices, rows, cols));
 
-  const submit = () => {
+  const submit = (): void => {
     const trimmed = name.trim();
     if (!/^[A-Za-z][A-Za-z0-9_]{0,3}$/.test(trimmed)) {
       setNameError('名字需以字母开头，最多 4 个字符（字母、数字、下划线）');
@@ -129,8 +152,9 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
   };
 
   const blockWidths = grid.map((row) => row.map((m) => m?.cols));
-  const totalRows = result.built ? result.built.matrix.rows : '—';
-  const totalCols = result.built ? result.built.matrix.cols : '—';
+  const built = result.built;
+  const totalRows = built ? built.matrix.rows : '—';
+  const totalCols = built ? built.matrix.cols : '—';
 
   return (
     <Modal open={open} onClose={onClose} className="block-modal" labelledBy="block-title">
@@ -201,11 +225,11 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
             )}
           </div>
 
-          <div className={`block-check ${result.built ? 'ok' : 'error'}`}>
-            <span>{result.built ? <Icon name="check" size={14} /> : '!'}</span>
+          <div className={`block-check ${built ? 'ok' : 'error'}`}>
+            <span>{built ? <Icon name="check" size={14} /> : '!'}</span>
             <div>
-              <strong>{result.built ? '块边界完全吻合' : '矩阵还没对齐'}</strong>
-              <p>{result.built ? `目标矩阵将会是 ${totalRows}×${totalCols}。` : result.error}</p>
+              <strong>{built ? '块边界完全吻合' : '矩阵还没对齐'}</strong>
+              <p>{built ? `目标矩阵将会是 ${totalRows}×${totalCols}。` : result.error}</p>
             </div>
           </div>
 
@@ -234,12 +258,12 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
           <div className="block-insight">
             <div className="block-insight-head">
               <span className="micro-label">STRUCTURE NOTE / 为什么能拼</span>
-              <span>{result.built ? `${result.built.matrix.rows} × ${result.built.matrix.cols}` : '—'}</span>
+              <span>{built ? `${built.matrix.rows} × ${built.matrix.cols}` : '—'}</span>
             </div>
             <div className="block-shape-equation">
-              <span>{result.built ? result.built.rowHeights.join(' + ') : '?'} 行</span>
+              <span>{built ? built.rowHeights.join(' + ') : '?'} 行</span>
               <em>×</em>
-              <span>{result.built ? result.built.colWidths.join(' + ') : '?'} 列</span>
+              <span>{built ? built.colWidths.join(' + ') : '?'} 列</span>
               <strong>→ {totalRows} × {totalCols}</strong>
             </div>
             <p>
@@ -258,8 +282,8 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
             {selection.map((row, r) =>
               row.map((value, c) => {
                 const matrix = matrices.find((m) => m.name === value);
-                const rowHeight = result.built?.rowHeights?.[r];
-                const colWidth = result.built?.colWidths?.[c];
+                const rowHeight = built?.rowHeights[r];
+                const colWidth = built?.colWidths[c];
                 return (
                   <div
                     className="diagram-block"
@@ -277,8 +301,8 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
 
           <div className="preview-matrix-wrap">
             <span className="preview-caption">目标矩阵 {name || 'K'}</span>
-            {result.built ? (
-              <MatrixMini matrix={result.built.matrix} max={5} variant="dark" />
+            {built ? (
+              <MatrixMini matrix={built.matrix} max={5} variant="dark" />
             ) : (
               <div className="preview-error-glyph">×</div>
             )}
@@ -299,7 +323,7 @@ export default function BlockModal({ open, matrices, nameSuggestion, onClose, on
             </ul>
           </div>
 
-          <button type="button" className="primary-button block-submit" onClick={submit} disabled={!result.built}>
+          <button type="button" className="primary-button block-submit" onClick={submit} disabled={!built}>
             <Icon name="grid" size={15} /> 拼合，并逐格演示
           </button>
           <span className="preview-footnote">新矩阵会被加入左侧矩阵库，并立即进入演示台。</span>

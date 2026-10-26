@@ -1,13 +1,14 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
-const path = require('node:path');
-const fs = require('node:fs');
+import { app, BrowserWindow, Menu, shell } from 'electron';
+import type { MenuItemConstructorOptions } from 'electron';
+import path from 'node:path';
+import fs from 'node:fs';
 
-const isDev = !!process.env.ELECTRON_START_URL;
+const isDev = Boolean(process.env.ELECTRON_START_URL);
 app.setName('矩阵工坊');
 
-function createMenu() {
+function createMenu(): void {
   const isMac = process.platform === 'darwin';
-  const template = [
+  const template: MenuItemConstructorOptions[] = [
     ...(isMac
       ? [
           {
@@ -21,7 +22,7 @@ function createMenu() {
               { type: 'separator' },
               { role: 'quit', label: '退出矩阵工坊' },
             ],
-          },
+          } satisfies MenuItemConstructorOptions,
         ]
       : []),
     {
@@ -61,7 +62,7 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function createWindow() {
+function createWindow(): void {
   const win = new BrowserWindow({
     width: 1440,
     height: 940,
@@ -96,19 +97,18 @@ function createWindow() {
     }
   });
 
-  if (isDev) {
+  if (isDev && process.env.ELECTRON_START_URL) {
     win.loadURL(process.env.ELECTRON_START_URL);
   } else {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
-  // Optional visual smoke-test hook used during development. It never runs
-  // unless MATRIX_CAPTURE is explicitly set.
+  // Optional visual smoke-test hook. It never runs unless MATRIX_CAPTURE is set.
   if (process.env.MATRIX_CAPTURE) {
     win.webContents.once('did-finish-load', async () => {
       await new Promise((resolve) => setTimeout(resolve, Number(process.env.MATRIX_CAPTURE_DELAY || 1800)));
       const image = await win.webContents.capturePage();
-      fs.writeFileSync(process.env.MATRIX_CAPTURE, image.toPNG());
+      fs.writeFileSync(process.env.MATRIX_CAPTURE as string, image.toPNG());
       if (!process.env.MATRIX_KEEP_OPEN) app.quit();
     });
   }

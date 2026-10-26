@@ -1,50 +1,85 @@
-import { Q, formatNumber } from './rational.js';
-import * as M from './matrix.js';
-import { analyzeExpression, evaluateExpression, formatAst } from './expression.js';
+import { Q, formatNumber } from '../core/rational.js';
+import type { RationalInput } from '../core/rational.js';
+import * as M from '../core/matrix.js';
+import type { BlockAssembly, Matrix, RowOperationStep } from '../core/matrix.js';
+import { analyzeExpression, evaluateExpression, formatAst } from '../core/expression.js';
+import type { AstNode, MatrixLibrary } from '../core/expression.js';
+import type {
+  MatrixRuntimeValue,
+  OperationRecord,
+  OperationType,
+  RuntimeValue,
+  ScalarRuntimeValue,
+} from '../core/protocol.js';
+import type {
+  BeatFields,
+  BlockStoryInput,
+  BuildStoryOptions,
+  CellState,
+  CellStateMap,
+  FlatBeat,
+  LensFields,
+  LensTerm,
+  OperationCopy,
+  PanelOptions,
+  ReadoutTone,
+  Story,
+  StoryBeat,
+  StoryChapter,
+  StoryLens,
+  StoryMeta,
+  StoryPanel,
+  StoryReadout,
+  StoryResultMeta,
+  StoryRootType,
+  StorySourceRef,
+  StoryTemplateOverride,
+  TermState,
+} from './storyTypes.js';
 
 /* ------------------------------------------------------------------ *
  * Shared story vocabulary
  * ------------------------------------------------------------------ */
 
-const SUBS = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
-export function sub(n) {
+const SUBS: readonly string[] = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+export function sub(n: number | string): string {
   return String(n)
     .split('')
     .map((d) => SUBS[Number(d)] || d)
     .join('');
 }
-export function cellName(prefix, r, c) {
+export function cellName(prefix: string, r: number, c: number): string {
   return `${prefix}${sub(r + 1)}${sub(c + 1)}`;
 }
-export function fmt(value) {
+export function fmt(value: RationalInput): string {
   return formatNumber(value);
 }
-export function wrapped(value) {
+export function wrapped(value: Q): string {
   const text = fmt(value);
   return value.sign < 0 || text.includes('/') ? `(${text})` : text;
 }
-export function rowText(row) {
+export function rowText(row: readonly Q[]): string {
   return `[ ${row.map((v) => fmt(v)).join('    ')} ]`;
 }
-export function rowBrackets(row) {
+export function rowBrackets(row: readonly Q[]): string {
   return `⟨ ${row.map((v) => fmt(v)).join(', ')} ⟩`;
 }
 
-const key = (r, c) => `${r},${c}`;
+const key = (r: number, c: number): string => `${r},${c}`;
 
-function cellsHidden(matrix) {
-  const out = {};
+function cellsHidden(matrix: Matrix): CellStateMap {
+  const out: CellStateMap = {};
   for (let r = 0; r < matrix.rows; r++) {
     for (let c = 0; c < matrix.cols; c++) out[key(r, c)] = { hidden: true };
   }
   return out;
 }
 
-function markCell(cells, r, c, state) {
+function markCell(cells: CellStateMap, r: number, c: number, state: CellState): void {
   cells[key(r, c)] = { ...cells[key(r, c)], ...state, hidden: false };
 }
 
-function completeCells(matrix, cells) {
+function completeCells(matrix: Matrix, cells: CellStateMap): void {
   for (let r = 0; r < matrix.rows; r++) {
     for (let c = 0; c < matrix.cols; c++) {
       if (!cells[key(r, c)] || cells[key(r, c)].hidden) {
@@ -54,7 +89,7 @@ function completeCells(matrix, cells) {
   }
 }
 
-export function panel(matrix, label, options = {}) {
+export function panel(matrix: Matrix, label: string, options: PanelOptions = {}): StoryPanel {
   return {
     key: options.key || label,
     label,
@@ -71,21 +106,29 @@ export function panel(matrix, label, options = {}) {
   };
 }
 
-function beat(id, fields) {
+function beat(id: string, fields: BeatFields): StoryBeat {
   return {
     id,
     title: fields.title,
     narration: fields.narration || '',
     panels: fields.panels || [],
     connectors: fields.connectors || [],
-    lens: fields.lens || {},
+    lens: {
+      kicker: fields.lens?.kicker ?? '',
+      heading: fields.lens?.heading ?? '',
+      equation: fields.lens?.equation ?? '',
+      terms: fields.lens?.terms ?? [],
+      accumulator: fields.lens?.accumulator ?? null,
+      note: fields.lens?.note ?? '',
+      rule: fields.lens?.rule ?? '',
+    },
     readout: fields.readout || null,
     isFinale: Boolean(fields.isFinale),
     duration: fields.duration || null,
   };
 }
 
-function chapter(id, title, tag, description, beats) {
+function chapter(id: string, title: string, tag: string, description: string, beats: StoryBeat[]): StoryChapter {
   return { id, title, tag, description, beats };
 }
 
@@ -97,11 +140,11 @@ function makeLens({
   accumulator = null,
   note = '',
   rule = '',
-}) {
+}: LensFields): StoryLens {
   return { kicker, heading, equation, terms, accumulator, note, rule };
 }
 
-function scalarReadout(label, value, note = '', tone = 'live') {
+function scalarReadout(label: string, value: string | Q, note = '', tone: ReadoutTone = 'live'): StoryReadout {
   return { label, value: typeof value === 'string' ? value : fmt(value), note, tone };
 }
 
@@ -109,7 +152,7 @@ function scalarReadout(label, value, note = '', tone = 'live') {
  * Operation vocabulary / rules
  * ------------------------------------------------------------------ */
 
-export const OPERATION_COPY = {
+export const OPERATION_COPY: Record<string, OperationCopy> = {
   add: {
     eyebrow: 'ENTRYWISE SUM',
     title: '同位置相加，形状原地不动',
@@ -238,44 +281,58 @@ export const OPERATION_COPY = {
   },
 };
 
-export function operationCopy(type) {
-  return OPERATION_COPY[type] || OPERATION_COPY.generic;
+export function operationCopy(type: string): OperationCopy {
+  return OPERATION_COPY[type] ?? (OPERATION_COPY.generic as OperationCopy);
 }
 
-function outputSymbols(op) {
+function outputSymbols(op: OperationRecord): { label: string; entry: string } {
   const label = op?.resultValue?.label || 'C';
   const entry = /^[A-Za-z]$/.test(label) ? label.toLowerCase() : 'c';
   return { label, entry };
 }
 
-function localizedRule(rule, label) {
+function localizedRule(rule: string, label: string): string {
   if (!label || label === 'C') return rule;
   return rule.replaceAll('Cᵢⱼ', `${label}ᵢⱼ`).replaceAll('C 的', `${label} 的`);
 }
+
+function matrixOperand(value: RuntimeValue | undefined, context: string): MatrixRuntimeValue {
+  if (!value || value.kind !== 'matrix') throw new Error(`${context} 需要一个矩阵值`);
+  return value;
+}
+
+function scalarLabelOf(op: OperationRecord): string {
+  return op.scalarLabel ?? (op.scalar ? fmt(op.scalar) : 'k');
+}
+
+const cell = (
+  tone: CellState['tone'],
+  extra: Omit<CellState, 'tone'> = {},
+): CellState => ({ tone, ...extra });
 
 /* ------------------------------------------------------------------ *
  * Elementwise chapters: +, −, ⊙, scalar ×
  * ------------------------------------------------------------------ */
 
-function buildElementwiseChapter(op) {
-  const [a, b] = op.operands;
-  const A = a.matrix;
+function buildElementwiseChapter(op: OperationRecord): StoryChapter[] {
+  const a = matrixOperand(op.operands[0], '逐格运算');
   const isScale = op.type === 'scale';
-  const B = isScale ? null : b.matrix;
-  const R = op.resultValue.matrix;
+  const b = isScale ? null : matrixOperand(op.operands[1], '逐格运算');
+  const A = a.matrix;
+  const B = b?.matrix ?? null;
+  const R = matrixOperand(op.resultValue, '逐格运算').matrix;
+  const scalarText = scalarLabelOf(op);
   const symbol = isScale ? '×' : op.type === 'add' ? '+' : op.type === 'subtract' ? '−' : '⊙';
   const copy = operationCopy(op.type);
   const { label: outLabel, entry: outSym } = outputSymbols(op);
   const outputCells = cellsHidden(R);
-  const beats = [];
+  const beats: StoryBeat[] = [];
   let index = 0;
   for (let r = 0; r < R.rows; r++) {
     for (let c = 0; c < R.cols; c++) {
       index += 1;
-      const aCell = { tone: 'source' };
-      const bCell = isScale ? null : { tone: 'source' };
-      const sourceCellsA = { [key(r, c)]: aCell };
-      const sourceCellsB = isScale ? {} : { [key(r, c)]: bCell };
+      const sourceCellsA: CellStateMap = { [key(r, c)]: cell('source') };
+      const sourceCellsB: CellStateMap = isScale ? {} : { [key(r, c)]: cell('source') };
       const prevCells = { ...outputCells };
       for (let rr = 0; rr < R.rows; rr++) {
         for (let cc = 0; cc < R.cols; cc++) {
@@ -291,13 +348,13 @@ function buildElementwiseChapter(op) {
       Object.assign(outputCells, prevCells);
       const lhs = `${cellName(outSym, r, c)}`;
       const ar = isScale
-        ? `${op.scalarLabel || fmt(op.scalar)} × ${fmt(A.data[r][c])}`
-        : `${fmt(A.data[r][c])} ${symbol} ${fmt(B.data[r][c])}`;
+        ? `${scalarText} × ${fmt(A.data[r][c])}`
+        : `${fmt(A.data[r][c])} ${symbol} ${fmt(B!.data[r][c])}`;
       beats.push(
         beat(`entry-${r}-${c}`, {
           title: `落在第 ${r + 1} 行 · 第 ${c + 1} 列`,
           narration: isScale
-            ? `把 ${op.scalarLabel || fmt(op.scalar)} 乘到 A 的这一个位置上，其他位置使用同一比例。`
+            ? `把 ${scalarText} 乘到 A 的这一个位置上，其他位置使用同一比例。`
             : `A 与 B 各交出同一坐标上的一个数字，按 ${symbol} 合成结果。`,
           panels: [
             panel(A, a.label, {
@@ -307,7 +364,7 @@ function buildElementwiseChapter(op) {
               role: 'input',
               caption: a.expr && a.expr !== a.label ? a.expr : '输入矩阵',
             }),
-            ...(isScale
+            ...(isScale || !B || !b
               ? []
               : [
                   panel(B, b.label, {
@@ -326,20 +383,20 @@ function buildElementwiseChapter(op) {
               caption: '按位置生成',
             }),
           ],
-          connectors: isScale ? [`× ${op.scalarLabel || fmt(op.scalar)}  =`] : [symbol, '='],
+          connectors: isScale ? [`× ${scalarText}  =`] : [symbol, '='],
           lens: makeLens({
             kicker: `逐格 · 第 ${r + 1} 行 / 第 ${c + 1} 列`,
             heading: isScale ? '同一个比例，落到每一个坐标' : '同一坐标，各取一个数',
             equation: `${lhs} = ${ar} = ${fmt(R.data[r][c])}`,
             terms: isScale
-              ? [
-                  { label: '标量 k', expr: op.scalarLabel || fmt(op.scalar), value: '', state: 'active' },
+              ? ([
+                  { label: '标量 k', expr: scalarText, value: '', state: 'active' },
                   { label: `A${sub(r + 1)}${sub(c + 1)}`, expr: fmt(A.data[r][c]), value: '', state: 'active' },
-                ]
-              : [
+                ] satisfies LensTerm[])
+              : ([
                   { label: `a${sub(r + 1)}${sub(c + 1)}`, expr: fmt(A.data[r][c]), value: '', state: 'active' },
-                  { label: `b${sub(r + 1)}${sub(c + 1)}`, expr: fmt(B.data[r][c]), value: '', state: 'active' },
-                ],
+                  { label: `b${sub(r + 1)}${sub(c + 1)}`, expr: fmt(B!.data[r][c]), value: '', state: 'active' },
+                ] satisfies LensTerm[]),
             accumulator: { label: '写成结果', value: fmt(R.data[r][c]) },
             note: `已完成 ${index} / ${R.rows * R.cols} 个位置；所有位置彼此独立。`,
             rule: localizedRule(copy.rule, outLabel),
@@ -364,21 +421,22 @@ function buildElementwiseChapter(op) {
  * Matrix multiplication
  * ------------------------------------------------------------------ */
 
-function buildMatmulChapter(op) {
-  const [a, b] = op.operands;
+function buildMatmulChapter(op: OperationRecord): StoryChapter[] {
+  const a = matrixOperand(op.operands[0], '矩阵乘法');
+  const b = matrixOperand(op.operands[1], '矩阵乘法');
   const A = a.matrix;
   const B = b.matrix;
-  const R = op.resultValue.matrix;
+  const R = matrixOperand(op.resultValue, '矩阵乘法').matrix;
   const copy = operationCopy('matmul');
   const { label: outLabel, entry: outSym } = outputSymbols(op);
   const outputCells = cellsHidden(R);
-  const beats = [];
+  const beats: StoryBeat[] = [];
   let total = 0;
   const totalDots = R.rows * R.cols;
   for (let i = 0; i < R.rows; i++) {
     for (let j = 0; j < R.cols; j++) {
       let accumulator = Q.of(0);
-      const termsMeta = [];
+      const termsMeta: Array<{ k: number; av: Q; bv: Q; product: Q }> = [];
       for (let k = 0; k < A.cols; k++) {
         const av = A.data[i][k];
         const bv = B.data[k][j];
@@ -387,16 +445,16 @@ function buildMatmulChapter(op) {
       }
       for (let step = 0; step < termsMeta.length; step++) {
         total += 1;
-        const term = termsMeta[step];
+        const term = termsMeta[step]!;
         accumulator = accumulator.add(term.product);
         const isLast = step === termsMeta.length - 1;
-        const sourceA = {};
+        const sourceA: CellStateMap = {};
         for (let c = 0; c < A.cols; c++) {
-          sourceA[key(i, c)] = { tone: c === step ? 'source' : 'scan' };
+          sourceA[key(i, c)] = cell(c === step ? 'source' : 'scan');
         }
-        const sourceB = {};
+        const sourceB: CellStateMap = {};
         for (let r2 = 0; r2 < B.rows; r2++) {
-          sourceB[key(r2, j)] = { tone: r2 === step ? 'source' : 'scan' };
+          sourceB[key(r2, j)] = cell(r2 === step ? 'source' : 'scan');
         }
         const nextCells = { ...outputCells };
         for (let rr = 0; rr < R.rows; rr++) {
@@ -419,7 +477,7 @@ function buildMatmulChapter(op) {
           }
         }
         Object.assign(outputCells, nextCells);
-        const kTerms = termsMeta.map((t, idx) => ({
+        const kTerms: LensTerm[] = termsMeta.map((t, idx) => ({
           label: `k = ${idx + 1}`,
           expr: `${wrapped(t.av)} × ${wrapped(t.bv)}`,
           value: fmt(t.product),
@@ -496,13 +554,13 @@ function buildMatmulChapter(op) {
  * Transpose & Kronecker
  * ------------------------------------------------------------------ */
 
-function buildTransposeChapter(op) {
-  const source = op.operands[0];
+function buildTransposeChapter(op: OperationRecord): StoryChapter[] {
+  const source = matrixOperand(op.operands[0], '转置');
   const A = source.matrix;
-  const R = op.resultValue.matrix;
+  const R = matrixOperand(op.resultValue, '转置').matrix;
   const copy = operationCopy('transpose');
   const outCells = cellsHidden(R);
-  const beats = [];
+  const beats: StoryBeat[] = [];
   let index = 0;
   for (let r = 0; r < A.rows; r++) {
     for (let c = 0; c < A.cols; c++) {
@@ -525,7 +583,7 @@ function buildTransposeChapter(op) {
           narration: '转置不做任何加减，只交换行下标与列下标。',
           panels: [
             panel(A, source.label, {
-              cells: { [key(r, c)]: { tone: 'source' } },
+              cells: { [key(r, c)]: cell('source') },
               rowFocus: [r],
               colFocus: [c],
               caption: `${A.rows}×${A.cols}`,
@@ -559,29 +617,30 @@ function buildTransposeChapter(op) {
   return [chapter('chapter-transpose', '交换行列坐标', copy.tag, '所有数字都在，只换位置。', beats)];
 }
 
-function buildKronChapter(op) {
-  const [a, b] = op.operands;
+function buildKronChapter(op: OperationRecord): StoryChapter[] {
+  const a = matrixOperand(op.operands[0], 'Kronecker 积');
+  const b = matrixOperand(op.operands[1], 'Kronecker 积');
   const A = a.matrix;
   const B = b.matrix;
-  const R = op.resultValue.matrix;
+  const R = matrixOperand(op.resultValue, 'Kronecker 积').matrix;
   const copy = operationCopy('kron');
   const outCells = cellsHidden(R);
-  const beats = [];
+  const beats: StoryBeat[] = [];
   let index = 0;
   for (let r = 0; r < A.rows; r++) {
     for (let c = 0; c < A.cols; c++) {
       index += 1;
       const scalar = A.data[r][c];
       const next = { ...outCells };
-      const blockCells = {};
-      const details = [];
+      const blockCells: CellStateMap = {};
+      const details: LensTerm[] = [];
       for (let br = 0; br < B.rows; br++) {
         for (let bc = 0; bc < B.cols; bc++) {
           const rr = r * B.rows + br;
           const cc = c * B.cols + bc;
           const value = scalar.mul(B.data[br][bc]);
           markCell(next, rr, cc, { tone: 'live', text: fmt(value) });
-          blockCells[key(br, bc)] = { tone: 'source' };
+          blockCells[key(br, bc)] = cell('source');
           details.push({
             label: `${sub(r + 1)}${sub(c + 1)} · b${sub(br + 1)}${sub(bc + 1)}`,
             expr: `${fmt(scalar)} × ${fmt(B.data[br][bc])}`,
@@ -614,7 +673,7 @@ function buildKronChapter(op) {
           narration: `第 ${index} 个 A 元素接管 B 的一个副本，块内每个数字都乘上它。`,
           panels: [
             panel(A, a.label, {
-              cells: { [key(r, c)]: { tone: 'source' } },
+              cells: { [key(r, c)]: cell('source') },
               rowFocus: [r],
               colFocus: [c],
               caption: '外层结构',
@@ -657,7 +716,7 @@ function buildKronChapter(op) {
  * Row reduction chapters
  * ------------------------------------------------------------------ */
 
-function rowOperationLabel(step) {
+function rowOperationLabel(step: RowOperationStep): string {
   const target = `R${sub(step.target + 1)}`;
   if (step.type === 'swap') return `${target} ↔ R${sub(step.source + 1)}`;
   if (step.type === 'scale') {
@@ -671,8 +730,8 @@ function rowOperationLabel(step) {
   return `${target} ← ${target} ${sign} ${abs.isOne ? '' : wrapped(abs)}R${sub(step.source + 1)}`;
 }
 
-function rowPulseCells(width, row, col = null, sourceRow = null) {
-  const cells = {};
+function rowPulseCells(width: number, row: number, col: number | null = null, sourceRow: number | null = null): CellStateMap {
+  const cells: CellStateMap = {};
   for (let c = 0; c < width; c++) {
     cells[key(row, c)] = { tone: c === col ? 'pivot' : 'active' };
   }
@@ -695,8 +754,20 @@ function makeRowStepBeat({
   pivotCol,
   dividerAfter,
   phase,
+}: {
+  id: string;
+  step: RowOperationStep;
+  before: Q[][];
+  after: Q[][];
+  titlePrefix: string;
+  copy: OperationCopy;
+  extraRule?: string;
+  pivotCol: number;
+  dividerAfter: number | null;
+  phase: string;
 }) {
-  const width = after.cols;
+  const cols = after[0]?.length ?? 0;
+  const width = cols;
   const cells = rowPulseCells(width, step.target, step.pivotCol ?? pivotCol, step.source);
   if (step.pivotRow != null && step.type !== 'swap') {
     cells[key(step.pivotRow, step.pivotCol ?? pivotCol)] = { tone: 'pivot' };
@@ -715,7 +786,7 @@ function makeRowStepBeat({
   else if (step.type === 'scale') heading = '先把主元本身化为 1';
   else heading = `让第 ${(step.pivotCol ?? pivotCol) + 1} 列的其他行归零`;
   const equation = rowOperationLabel(step);
-  const terms = [];
+  const terms: LensTerm[] = [];
   if (sourceRow) {
     terms.push({
       label: `源行 R${sub(step.source + 1)}`,
@@ -736,10 +807,10 @@ function makeRowStepBeat({
     value: '',
     state: 'active',
   });
-  const workingMatrix = {
+  const workingMatrix: Matrix = {
     name: '工作矩阵',
     rows: after.length,
-    cols: after[0].length,
+    cols: after[0]?.length ?? 0,
     data: after,
   };
   return beat(id, {
@@ -770,7 +841,7 @@ function makeRowStepBeat({
         label: '主元位置',
         value:
           step.pivotCol != null
-            ? `第 ${step.pivotRow + 1} 行 · 第 ${step.pivotCol + 1} 列`
+            ? `第 ${(step.pivotRow ?? step.target) + 1} 行 · 第 ${step.pivotCol + 1} 列`
             : '本步无主元',
       },
       note: step.type === 'add' ? '目标行整行参与运算；所有列同步更新，才能保持行等价。' : '行变换是可逆的操作，不会改变解集。',
@@ -785,16 +856,16 @@ function makeRowStepBeat({
   });
 }
 
-function buildInverseChapter(op) {
-  const source = op.operands[0];
+function buildInverseChapter(op: OperationRecord): StoryChapter[] {
+  const source = matrixOperand(op.operands[0], '逆矩阵');
   const A = source.matrix;
   const trail = M.inverseTrail(A);
   const n = A.rows;
   const copy = operationCopy('inverse');
-  const beats = [];
+  const beats: StoryBeat[] = [];
   const initial = trail.augmented;
-  const initialCells = {};
-  for (let r = 0; r < n; r++) initialCells[key(r, r)] = { tone: 'source' };
+  const initialCells: CellStateMap = {};
+  for (let r = 0; r < n; r++) initialCells[key(r, r)] = cell('source');
   beats.push(
     beat('inverse-setup', {
       title: '先搭好增广舞台 [A | I]',
@@ -840,7 +911,7 @@ function buildInverseChapter(op) {
     );
   });
   const rightStart = n;
-  const finalCells = {};
+  const finalCells: CellStateMap = {};
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
       finalCells[key(r, c)] = { tone: 'done', text: fmt(trail.matrix.data[r][c]) };
@@ -887,12 +958,15 @@ function buildInverseChapter(op) {
   ];
 }
 
-function buildRrefChapter(op, { forRank = false } = {}) {
-  const source = op.operands[0];
+function buildRrefChapter(
+  op: OperationRecord,
+  { forRank = false }: { forRank?: boolean } = {},
+): { chapters: StoryChapter[]; trail: M.RowReductionTrail } {
+  const source = matrixOperand(op.operands[0], 'RREF');
   const A = source.matrix;
   const trail = M.rowReduceTrail(A);
   const copy = operationCopy(forRank ? 'rank' : 'rref');
-  const beats = [];
+  const beats: StoryBeat[] = [];
   beats.push(
     beat('rref-setup', {
       title: '从原矩阵开始，记录每一次行操作',
@@ -933,7 +1007,7 @@ function buildRrefChapter(op, { forRank = false } = {}) {
       }),
     );
   });
-  const pivotCells = {};
+  const pivotCells: CellStateMap = {};
   for (const p of trail.pivots) pivotCells[key(p.row, p.col)] = { tone: 'pivot' };
   beats.push(
     beat('rref-summary', {
@@ -986,12 +1060,12 @@ function buildRrefChapter(op, { forRank = false } = {}) {
  * Determinant & trace
  * ------------------------------------------------------------------ */
 
-function buildDeterminantChapter(op) {
-  const source = op.operands[0];
+function buildDeterminantChapter(op: OperationRecord): StoryChapter[] {
+  const source = matrixOperand(op.operands[0], '行列式');
   const A = source.matrix;
   const copy = operationCopy('determinant');
   const n = A.rows;
-  const beats = [];
+  const beats: StoryBeat[] = [];
 
   if (n === 1) {
     const only = A.data[0][0];
@@ -1025,23 +1099,23 @@ function buildDeterminantChapter(op) {
     const [c, d] = [A.data[1][0], A.data[1][1]];
     const main = a.mul(d);
     const anti = b.mul(c);
-    const cells1 = {
-      '0,0': { tone: 'source' },
-      '1,1': { tone: 'source' },
-      '0,1': { tone: 'dim' },
-      '1,0': { tone: 'dim' },
+    const cells1: CellStateMap = {
+      '0,0': cell('source'),
+      '1,1': cell('source'),
+      '0,1': cell('dim'),
+      '1,0': cell('dim'),
     };
-    const cells2 = {
-      '0,1': { tone: 'source' },
-      '1,0': { tone: 'source' },
-      '0,0': { tone: 'dim' },
-      '1,1': { tone: 'dim' },
+    const cells2: CellStateMap = {
+      '0,1': cell('source'),
+      '1,0': cell('source'),
+      '0,0': cell('dim'),
+      '1,1': cell('dim'),
     };
-    const cellsDone = {
-      '0,0': { tone: 'done' },
-      '0,1': { tone: 'done' },
-      '1,0': { tone: 'done' },
-      '1,1': { tone: 'done' },
+    const cellsDone: CellStateMap = {
+      '0,0': cell('done'),
+      '0,1': cell('done'),
+      '1,0': cell('done'),
+      '1,1': cell('done'),
     };
     return [
       chapter(
@@ -1119,7 +1193,7 @@ function buildDeterminantChapter(op) {
       expandRow = r;
     }
   }
-  const terms = [];
+  const terms: LensTerm[] = [];
   let running = Q.of(0);
   for (let c = 0; c < n; c++) {
     const value = A.data[expandRow][c];
@@ -1134,14 +1208,14 @@ function buildDeterminantChapter(op) {
       value: fmt(contribution),
       state: c === n - 1 ? 'active' : 'active',
     });
-    const sourceCells = {};
+    const sourceCells: CellStateMap = {};
     for (let cc = 0; cc < n; cc++) {
-      sourceCells[key(expandRow, cc)] = { tone: cc === c ? 'source' : 'dim' };
+      sourceCells[key(expandRow, cc)] = cell(cc === c ? 'source' : 'dim');
     }
     for (let rr = 0; rr < n; rr++) {
-      if (rr !== expandRow) sourceCells[key(rr, c)] = { tone: 'scan' };
+      if (rr !== expandRow) sourceCells[key(rr, c)] = cell('scan');
     }
-    sourceCells[key(expandRow, c)] = { tone: 'source' };
+    sourceCells[key(expandRow, c)] = cell('source');
     const previousRunning = running.sub(contribution);
     beats.push(
       beat(`det-term-${c}`, {
@@ -1220,20 +1294,20 @@ function buildDeterminantChapter(op) {
   ];
 }
 
-function buildTraceChapter(op) {
-  const source = op.operands[0];
+function buildTraceChapter(op: OperationRecord): StoryChapter[] {
+  const source = matrixOperand(op.operands[0], '迹');
   const A = source.matrix;
   const copy = operationCopy('trace');
-  const beats = [];
+  const beats: StoryBeat[] = [];
   let running = Q.of(0);
   for (let i = 0; i < A.rows; i++) {
     running = running.add(A.data[i][i]);
-    const cells = {};
+    const cells: CellStateMap = {};
     for (let r = 0; r < A.rows; r++) {
       for (let c = 0; c < A.cols; c++) {
-        if (r === c && r < i) cells[key(r, c)] = { tone: 'done' };
-        else if (r === c && r === i) cells[key(r, c)] = { tone: 'source' };
-        else if (r !== c) cells[key(r, c)] = { tone: 'dim' };
+        if (r === c && r < i) cells[key(r, c)] = cell('done');
+        else if (r === c && r === i) cells[key(r, c)] = cell('source');
+        else if (r !== c) cells[key(r, c)] = cell('dim');
       }
     }
     beats.push(
@@ -1250,7 +1324,7 @@ function buildTraceChapter(op) {
             expr: fmt(A.data[j][j]),
             value: '',
             state: j < i ? 'done' : j === i ? 'active' : 'future',
-          })),
+          } satisfies LensTerm)),
           accumulator: { label: '当前迹', value: fmt(running) },
           note: i < A.rows - 1 ? '还有对角元素尚未加入。' : '主对角线已经走完。',
           rule: copy.rule,
@@ -1266,14 +1340,15 @@ function buildTraceChapter(op) {
  * Solve Ax = b
  * ------------------------------------------------------------------ */
 
-function buildSolveChapter(op) {
-  const [aValue, bValue] = op.operands;
+function buildSolveChapter(op: OperationRecord): StoryChapter[] {
+  const aValue = matrixOperand(op.operands[0], '解方程组');
+  const bValue = matrixOperand(op.operands[1], '解方程组');
   const A = aValue.matrix;
   const b = bValue.matrix;
   const { x, trail, augmented } = M.solveLinear(A, b);
   const copy = operationCopy('solve');
   const n = A.rows;
-  const beats = [];
+  const beats: StoryBeat[] = [];
   beats.push(
     beat('solve-setup', {
       title: '把方程组装进增广矩阵 [A | b]',
@@ -1314,11 +1389,11 @@ function buildSolveChapter(op) {
       }),
     );
   });
-  const extractionCells = {};
+  const extractionCells: CellStateMap = {};
   for (let r = 0; r < n; r++) {
     for (let c = 0; c <= n; c++) {
       extractionCells[key(r, c)] =
-        c === n ? { tone: 'result', text: fmt(trail.matrix.data[r][n]) } : { tone: 'done' };
+        c === n ? cell('result', { text: fmt(trail.matrix.data[r][n]) }) : cell('done');
     }
   }
   beats.push(
@@ -1363,7 +1438,7 @@ function buildSolveChapter(op) {
  * Generic fallback + Block assembly
  * ------------------------------------------------------------------ */
 
-function buildGenericChapter(op) {
+function buildGenericChapter(op: OperationRecord): StoryChapter[] {
   const first = op.operands?.[0];
   const copy = operationCopy(op.type);
   const panels = [];
@@ -1385,12 +1460,12 @@ function buildGenericChapter(op) {
           kicker: '执行',
           heading: '输入、规则、输出',
           equation: op.expr || '',
-          terms: op.operands?.map((operand) => ({
+          terms: (op.operands.map((operand) => ({
             label: operand.label,
             expr: operand.kind === 'matrix' ? `${operand.matrix.rows}×${operand.matrix.cols}` : fmt(operand.value),
             value: '',
             state: 'done',
-          })) || [],
+          })) satisfies LensTerm[]),
           accumulator: op.resultValue?.kind === 'matrix'
             ? { label: '结果形状', value: `${op.resultValue.matrix.rows}×${op.resultValue.matrix.cols}` }
             : op.resultValue?.kind === 'scalar'
@@ -1407,8 +1482,15 @@ function buildGenericChapter(op) {
   ];
 }
 
-function buildIdentityChapter(ast, library) {
-  const name = ast.type === 'group' ? ast.operand.name : ast.name;
+function matrixNameOfAst(ast: AstNode): string | null {
+  if (ast.type === 'matrix') return ast.name;
+  if (ast.type === 'group' || ast.type === 'transpose') return matrixNameOfAst(ast.operand);
+  return null;
+}
+
+function buildIdentityChapter(ast: AstNode, library: MatrixLibrary): StoryChapter[] {
+  const name = matrixNameOfAst(ast);
+  if (!name) return [];
   const entry = library[name];
   if (!entry) return [];
   return [
@@ -1435,21 +1517,33 @@ function buildIdentityChapter(ast, library) {
  * Finale
  * ------------------------------------------------------------------ */
 
-function formattedResult(op) {
+function formattedResult(op: OperationRecord): string {
   if (!op) return '';
   if (op.resultValue.kind === 'matrix') return `${op.resultValue.label}`;
   return fmt(op.resultValue.value);
 }
 
-function makeFinale({ expression, result, rootType, extraNote, extraPanels = [] }) {
+function makeFinale({
+  expression,
+  result,
+  rootType,
+  extraNote,
+  extraPanels = [],
+}: {
+  expression: string;
+  result: RuntimeValue;
+  rootType: string;
+  extraNote?: string;
+  extraPanels?: StoryPanel[];
+}): StoryChapter {
   const isScalar = result.kind === 'scalar';
-  const scalarValue = isScalar ? result.value : null;
-  const panels = [...extraPanels];
-  if (!isScalar) {
+  const scalarValue = result.kind === 'scalar' ? result.value : Q.of(0);
+  const panels: StoryPanel[] = [...extraPanels];
+  if (result.kind === 'matrix') {
     const matrix = result.matrix;
-    const cells = {};
+    const cells: CellStateMap = {};
     for (let r = 0; r < matrix.rows; r++) {
-      for (let c = 0; c < matrix.cols; c++) cells[key(r, c)] = { tone: 'result' };
+      for (let c = 0; c < matrix.cols; c++) cells[key(r, c)] = cell('result');
     }
     panels.push(
       panel(matrix, result.label, {
@@ -1474,8 +1568,8 @@ function makeFinale({ expression, result, rootType, extraNote, extraPanels = [] 
           ? `${expression} = ${fmt(scalarValue)}`
           : `${expression} = ${result.label}`,
         terms: isScalar
-          ? [{ label: '结果类型', expr: '标量', value: fmt(scalarValue), state: 'active' }]
-          : [
+          ? ([{ label: '结果类型', expr: '标量', value: fmt(scalarValue), state: 'active' }] satisfies LensTerm[])
+          : ([
               {
                 label: '结果形状',
                 expr: `${result.matrix.rows}×${result.matrix.cols}`,
@@ -1488,7 +1582,7 @@ function makeFinale({ expression, result, rootType, extraNote, extraPanels = [] 
                 value: '',
                 state: 'active',
               },
-            ],
+            ] satisfies LensTerm[]),
         accumulator: isScalar
           ? { label: '最终值', value: fmt(scalarValue) }
           : { label: '最终对象', value: `${result.matrix.rows}×${result.matrix.cols}` },
@@ -1506,7 +1600,7 @@ function makeFinale({ expression, result, rootType, extraNote, extraPanels = [] 
  * Chapter router
  * ------------------------------------------------------------------ */
 
-function chaptersForOperation(op, context = {}) {
+function chaptersForOperation(op: OperationRecord): StoryChapter[] {
   switch (op.type) {
     case 'add':
     case 'subtract':
@@ -1535,9 +1629,9 @@ function chaptersForOperation(op, context = {}) {
       const e = op.exponent;
       if (e === 1 || e === 0) return buildGenericChapter({ ...op, type: 'copy' });
       if (e === 2) {
-        const base = op.operands[0];
-        const result = op.resultValue;
-        const synthetic = {
+        const base = matrixOperand(op.operands[0], '矩阵幂');
+        const result = matrixOperand(op.resultValue, '矩阵幂');
+        const synthetic: OperationRecord = {
           ...op,
           type: 'matmul',
           operands: [base, { ...base, expr: base.label }],
@@ -1561,7 +1655,7 @@ function chaptersForOperation(op, context = {}) {
  * Scalar-only expressions
  * ------------------------------------------------------------------ */
 
-function buildScalarOnlyStory(expression, resultValue, library) {
+function buildScalarOnlyStory(expression: string, resultValue: ScalarRuntimeValue, library: MatrixLibrary): Story {
   const value = resultValue.value;
   const copy = {
     eyebrow: 'SCALAR READOUT',
@@ -1594,7 +1688,7 @@ function buildScalarOnlyStory(expression, resultValue, library) {
       eyebrow: copy.eyebrow,
       operationCount: 0,
       sources: [],
-      result: { kind: 'scalar', label: '结果', formatted: fmt(value) },
+      result: { kind: 'scalar', label: '结果', rows: null, cols: null, formatted: fmt(value) },
       shapeChain: '标量',
       rootType: 'generic',
     },
@@ -1603,14 +1697,17 @@ function buildScalarOnlyStory(expression, resultValue, library) {
   };
 }
 
-function buildScalarMergeChapter(expression, value, ops) {
+function buildScalarMergeChapter(expression: string, value: Q, ops: OperationRecord[]): StoryChapter {
   const scalarOps = ops.filter((op) => op.resultValue?.kind === 'scalar');
-  const terms = scalarOps.map((op, index) => ({
-    label: op.semantic || `标量 ${index + 1}`,
-    expr: op.expr,
-    value: fmt(op.resultValue.value),
-    state: 'done',
-  }));
+  const terms: LensTerm[] = scalarOps.map((op, index) => {
+    const result = op.resultValue;
+    return {
+      label: op.semantic || `标量 ${index + 1}`,
+      expr: op.expr,
+      value: result.kind === 'scalar' ? fmt(result.value) : '',
+      state: 'done',
+    };
+  });
   return chapter(
     'chapter-scalar-merge',
     '把标量结果重新合成',
@@ -1640,8 +1737,7 @@ function buildScalarMergeChapter(expression, value, ops) {
  * Public: story from expression
  * ------------------------------------------------------------------ */
 
-function relabelRoot(op, label = 'C') {
-  if (!op) return op;
+function relabelRoot(op: OperationRecord, label = 'C'): OperationRecord {
   const resultValue = op.resultValue;
   if (resultValue.kind === 'matrix') {
     const matrix = { ...resultValue.matrix, name: label };
@@ -1650,19 +1746,19 @@ function relabelRoot(op, label = 'C') {
   return { ...op, resultValue: { ...resultValue, label: '结果' }, label: '结果', isRoot: true };
 }
 
-function chooseRootLabel(library) {
+function chooseRootLabel(library: MatrixLibrary): string {
   for (const candidate of ['C', 'R', 'S', 'T', 'U', 'W', 'X', 'Y', 'Z']) {
     if (!library[candidate]) return candidate;
   }
   return 'C';
 }
 
-function uniqueSources(ops) {
-  const seen = new Set();
-  const sources = [];
+function uniqueSources(ops: OperationRecord[]): StorySourceRef[] {
+  const seen = new Set<string>();
+  const sources: StorySourceRef[] = [];
   for (const op of ops) {
-    for (const operand of op.operands || []) {
-      if (operand.origin === 'input' && operand.kind === 'matrix' && !seen.has(operand.label)) {
+    for (const operand of op.operands) {
+      if (operand.kind === 'matrix' && operand.origin === 'input' && !seen.has(operand.label)) {
         seen.add(operand.label);
         sources.push({ name: operand.label, matrix: operand.matrix });
       }
@@ -1671,21 +1767,22 @@ function uniqueSources(ops) {
   return sources;
 }
 
-function shapeOfValue(value) {
+function shapeOfValue(value: RuntimeValue | undefined): string {
   return value?.kind === 'matrix' ? `${value.matrix.rows}×${value.matrix.cols}` : '标量';
 }
 
-function deriveShapeChain(ops, result) {
+function deriveShapeChain(ops: OperationRecord[], result: RuntimeValue): string {
   if (!ops.length) {
     return result.kind === 'matrix' ? `${result.matrix.rows}×${result.matrix.cols}` : '标量';
   }
-  const root = ops.at(-1);
-  const [left, right] = root.operands || [];
+  const root = ops[ops.length - 1];
+  if (!root) return result.kind === 'matrix' ? `${result.matrix.rows}×${result.matrix.cols}` : '标量';
+  const [left, right] = root.operands;
   const out = result.kind === 'scalar' ? '标量' : `${result.matrix.rows}×${result.matrix.cols}`;
   const leftShape = shapeOfValue(left);
   const rightShape = shapeOfValue(right);
   if (result.kind === 'scalar' && ops.length > 1) {
-    const shapes = [];
+    const shapes: string[] = [];
     for (const op of ops) {
       for (const operand of op.operands || []) {
         if (operand.kind === 'matrix') {
@@ -1728,7 +1825,11 @@ function deriveShapeChain(ops, result) {
   }
 }
 
-export function buildStoryFromExpression(expression, library, options = {}) {
+export function buildStoryFromExpression(
+  expression: string,
+  library: MatrixLibrary,
+  options: BuildStoryOptions = {},
+): Story {
   const analysis = analyzeExpression(expression, library);
   if (!analysis.ok) throw new Error(analysis.error);
   const ast = analysis.ast;
@@ -1810,7 +1911,7 @@ export function buildStoryFromExpression(expression, library, options = {}) {
   }
 
   // Use the first input as a contextual panel in the finale when the result is scalar.
-  let extraPanels = [];
+  let extraPanels: StoryPanel[] = [];
   if (finalResult.kind === 'scalar') {
     const firstMatrixOperand = storyOps
       .flatMap((op) => op.operands)
@@ -1874,7 +1975,18 @@ export function buildStoryFromExpression(expression, library, options = {}) {
   };
 }
 
-function buildMeta({ expression, ops, result, rootType, ast }) {
+function buildMeta({
+  expression,
+  ops,
+  result,
+  rootType,
+}: {
+  expression: string;
+  ops: OperationRecord[];
+  result: RuntimeValue;
+  rootType: StoryRootType;
+  ast?: AstNode;
+}): StoryMeta {
   const sources = uniqueSources(ops);
   const copy = operationCopy(rootType);
   const chaptersCount = ops.length;
@@ -1903,14 +2015,19 @@ function buildMeta({ expression, ops, result, rootType, ast }) {
  * Public: block assembly story
  * ------------------------------------------------------------------ */
 
-export function buildBlockStory({ grid, built, expression = '分块组合', resultName = 'K' }) {
+export function buildBlockStory({
+  grid,
+  built,
+  expression = '分块组合',
+  resultName = 'K',
+}: BlockStoryInput): Story {
   const copy = operationCopy('concat');
   const result = { ...built.matrix, name: resultName };
-  const beats = [];
+  const beats: StoryBeat[] = [];
   const outCells = cellsHidden(result);
   let index = 0;
   const totalCells = result.rows * result.cols;
-  const placementFor = (r, c) =>
+  const placementFor = (r: number, c: number) =>
     built.placements.find(
       (p) =>
         r >= p.rowOffset &&
@@ -1922,16 +2039,16 @@ export function buildBlockStory({ grid, built, expression = '分块组合', resu
     for (let c = 0; c < result.cols; c++) {
       index += 1;
       const placement = placementFor(r, c);
-      const sourceCells = {};
+      const sourceCells: CellStateMap = {};
       if (placement) {
         const sr = r - placement.rowOffset;
         const sc = c - placement.colOffset;
-        sourceCells[key(sr, sc)] = { tone: 'source' };
-        markCell(outCells, r, c, { tone: 'live', text: fmt(result.data[r][c]) });
+        sourceCells[key(sr, sc)] = cell('source');
+        markCell(outCells, r, c, cell('live', { text: fmt(result.data[r][c]) }));
         for (let prev = 0; prev < r * result.cols + c; prev++) {
           const pr = Math.floor(prev / result.cols);
           const pc = prev % result.cols;
-          if (outCells[key(pr, pc)]?.hidden !== false) markCell(outCells, pr, pc, { tone: 'done', text: fmt(result.data[pr][pc]) });
+          if (outCells[key(pr, pc)]?.hidden !== false) markCell(outCells, pr, pc, cell('done', { text: fmt(result.data[pr][pc]) }));
         }
         beats.push(
           beat(`block-${r}-${c}`, {
@@ -1991,7 +2108,7 @@ export function buildBlockStory({ grid, built, expression = '分块组合', resu
         panel(result, `组合矩阵 ${resultName}`, {
           cells: Object.fromEntries(
             Array.from({ length: result.rows }, (_, r) =>
-              Array.from({ length: result.cols }, (_, c) => [key(r, c), { tone: 'result' }]),
+              Array.from({ length: result.cols }, (_, c) => [key(r, c), cell('result')] as const),
             ).flat(),
           ),
           role: 'result',
@@ -2001,7 +2118,7 @@ export function buildBlockStory({ grid, built, expression = '分块组合', resu
       lens: makeLens({
         kicker: '收束 · 分块组合',
         heading: '矩阵变大了，但结构仍然可追溯',
-        equation: `block(${grid.flat().filter(Boolean).map((b) => b.name).join(', ')}) = ${resultName}`,
+        equation: `block(${grid.flat().filter((matrix): matrix is Matrix => Boolean(matrix)).map((matrix) => matrix.name).join(', ')}) = ${resultName}`,
         terms: built.placements.map((p) => ({
           label: p.block.name,
           expr: `块 (${p.blockRow + 1}, ${p.blockCol + 1})`,
@@ -2034,7 +2151,7 @@ export function buildBlockStory({ grid, built, expression = '分块组合', resu
       tag: copy.tag,
       eyebrow: copy.eyebrow,
       operationCount: 1,
-      sources: grid.flat().filter(Boolean),
+      sources: grid.flat().filter((matrix): matrix is Matrix => Boolean(matrix)).map((matrix) => ({ name: matrix.name, matrix })),
       result: {
         kind: 'matrix',
         label: resultName,
@@ -2050,12 +2167,12 @@ export function buildBlockStory({ grid, built, expression = '分块组合', resu
   };
 }
 
-export function countBeats(story) {
+export function countBeats(story: Story): number {
   return story.chapters.reduce((sum, ch) => sum + ch.beats.length, 0);
 }
 
-export function flattenBeats(story) {
-  const result = [];
+export function flattenBeats(story: Story): FlatBeat[] {
+  const result: FlatBeat[] = [];
   story.chapters.forEach((chapter, chapterIndex) => {
     chapter.beats.forEach((b, beatIndex) => {
       result.push({

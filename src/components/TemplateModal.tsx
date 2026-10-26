@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { TEMPLATES, TEMPLATE_CATEGORIES } from '../data/seed.js';
-import { Modal, ModalHeader } from './Modal.jsx';
-import { Icon } from './Icons.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { TEMPLATES, TEMPLATE_CATEGORIES } from '../content/library.js';
+import type { FormulaTemplate, SlotAccept, TemplateCategoryOption } from '../content/library.js';
+import type { Matrix, StoredMatrix } from '../core/matrix.js';
+import { Modal, ModalHeader } from './Modal';
+import { Icon } from './Icons';
 
-const PREFERRED = {
+const PREFERRED: Record<string, string[]> = {
   matmul: ['A', 'B'],
   hadamard: ['A', 'B'],
   add: ['A', 'B'],
@@ -17,25 +19,25 @@ const PREFERRED = {
   kron: ['A', 'B'],
 };
 
-function accepts(matrix, accept) {
+function accepts(matrix: Matrix, accept: SlotAccept): boolean {
   if (accept === 'square') return matrix.rows === matrix.cols;
   if (accept === 'vector') return matrix.cols === 1;
   return true;
 }
 
-function combos(lists) {
+function combos<T>(lists: readonly T[][]): T[][] {
   if (!lists.length) return [[]];
-  return lists.reduce(
+  return lists.reduce<T[][]>(
     (acc, list) => acc.flatMap((prefix) => list.map((item) => [...prefix, item])),
     [[]],
   );
 }
 
-export function suggestSelection(template, matrices) {
+export function suggestSelection(template: FormulaTemplate, matrices: readonly Matrix[]): Record<string, string> {
   const slotLists = template.slots.map((slot) => matrices.filter((m) => accepts(m, slot.accept)));
   if (slotLists.some((list) => !list.length)) return {};
   const preferred = PREFERRED[template.id] || [];
-  let best = null;
+  let best: Matrix[] | null = null;
   let bestScore = Infinity;
   for (const combination of combos(slotLists)) {
     if (template.validate(combination)) continue;
@@ -52,45 +54,59 @@ export function suggestSelection(template, matrices) {
   }
   if (!best) {
     return Object.fromEntries(
-      template.slots.map((slot, index) => [slot.key, slotLists[index]?.[0]?.name || '']),
+      template.slots.map((slot, index) => [slot.key, slotLists[index]?.[0]?.name ?? '']),
     );
   }
-  return Object.fromEntries(template.slots.map((slot, index) => [slot.key, best[index].name]));
+  return Object.fromEntries(template.slots.map((slot, index) => [slot.key, best![index]?.name ?? '']));
 }
 
-export default function TemplateModal({ open, matrices, onClose, onLaunch, onOpenBlock }) {
-  const [category, setCategory] = useState('all');
-  const [selectedId, setSelectedId] = useState(TEMPLATES[0]?.id || '');
-  const [selection, setSelection] = useState({});
+interface TemplateModalProps {
+  open: boolean;
+  matrices: readonly StoredMatrix[];
+  onClose: () => void;
+  onLaunch: (expression: string, template: FormulaTemplate) => void;
+  onOpenBlock: () => void;
+}
 
-  const activeTemplate = TEMPLATES.find((t) => t.id === selectedId) || TEMPLATES[0];
+export default function TemplateModal({
+  open,
+  matrices,
+  onClose,
+  onLaunch,
+  onOpenBlock,
+}: TemplateModalProps) {
+  const [category, setCategory] = useState<TemplateCategoryOption['id']>('all');
+  const [selectedId, setSelectedId] = useState(TEMPLATES[0]?.id ?? '');
+  const [selection, setSelection] = useState<Record<string, string>>({});
+
+  const activeTemplate = TEMPLATES.find((t) => t.id === selectedId) ?? TEMPLATES[0]!;
   const visibleTemplates = useMemo(
     () => (category === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.category === category)),
     [category],
   );
   const selectedMatrices = useMemo(
-    () => activeTemplate?.slots.map((slot) => matrices.find((m) => m.name === selection[slot.key])) || [],
+    () => activeTemplate.slots.map((slot) => matrices.find((matrix) => matrix.name === selection[slot.key])),
     [activeTemplate, matrices, selection],
   );
-  const validation = activeTemplate ? activeTemplate.validate(selectedMatrices) : '请选择一个模板';
+  const validation = activeTemplate.validate(selectedMatrices);
   const missing = selectedMatrices.some((m) => !m);
-  const expression = activeTemplate && !missing && !validation ? activeTemplate.build(selection) : '';
-  const isLaunchable = Boolean(activeTemplate && expression && !validation);
+  const expression = !missing && !validation ? activeTemplate.build(selection) : '';
+  const isLaunchable = Boolean(expression && !validation);
 
   useEffect(() => {
     if (!open) return;
-    if (!TEMPLATES.some((t) => t.id === selectedId)) setSelectedId(TEMPLATES[0]?.id || '');
+    if (!TEMPLATES.some((t) => t.id === selectedId)) setSelectedId(TEMPLATES[0]?.id ?? '');
   }, [open, selectedId]);
 
   useEffect(() => {
-    if (!open || !activeTemplate) return;
+    if (!open) return;
     setSelection(suggestSelection(activeTemplate, matrices));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedId, matrices.length]);
 
-  if (!open || !activeTemplate) return null;
+  if (!open) return null;
 
-  const chooseTemplate = (template) => {
+  const chooseTemplate = (template: FormulaTemplate): void => {
     setSelectedId(template.id);
   };
 
@@ -98,7 +114,7 @@ export default function TemplateModal({ open, matrices, onClose, onLaunch, onOpe
     setSelection(suggestSelection(activeTemplate, matrices));
   };
 
-  const setSlot = (key, value) => {
+  const setSlot = (key: string, value: string): void => {
     setSelection((current) => ({ ...current, [key]: value }));
   };
 
@@ -181,10 +197,10 @@ export default function TemplateModal({ open, matrices, onClose, onLaunch, onOpe
           <div className="formula-preview">
             <span className="formula-preview-label">代入具体的矩阵之后</span>
             <strong>{expression || activeTemplate.formula}</strong>
-            {selectedMatrices.filter(Boolean).length > 0 && (
+            {selectedMatrices.some(Boolean) && (
               <span className="formula-chips">
-                {selectedMatrices.filter(Boolean).map((m) => (
-                  <i key={m.name}>{m.name} · {m.rows}×{m.cols}</i>
+                {selectedMatrices.filter((matrix): matrix is StoredMatrix => Boolean(matrix)).map((matrix) => (
+                  <i key={matrix.name}>{matrix.name} · {matrix.rows}×{matrix.cols}</i>
                 ))}
               </span>
             )}
@@ -264,7 +280,7 @@ export default function TemplateModal({ open, matrices, onClose, onLaunch, onOpe
   );
 }
 
-function disabledOptionsCount(template, matrices) {
+function disabledOptionsCount(template: FormulaTemplate, matrices: readonly Matrix[]): number {
   return template.slots.reduce(
     (sum, slot) => sum + matrices.filter((m) => !accepts(m, slot.accept)).length,
     0,
