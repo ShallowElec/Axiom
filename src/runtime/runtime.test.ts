@@ -20,7 +20,11 @@ describe('Axiom workbench runtime', () => {
     const result = store.run({ autoPlay: false });
     expect(result.ok).toBe(true);
     const run = result.run as RunRecord;
-    expect(run.provenance).toBe('derived');
+    expect(run.provenance).toBe('native');
+    expect(run.presentationProvenance).toBe('derived');
+    expect(run.native?.granularity).toBe('cell');
+    expect(run.native?.operations.length).toBe(5);
+    expect(Object.keys(run.native?.checkpoints ?? {})).toHaveLength(5);
     expect(run.kind).toBe('expression');
     expect(run.status).toBe('completed');
     expect(run.steps.length).toBeGreaterThan(1);
@@ -100,6 +104,43 @@ describe('Axiom workbench runtime', () => {
     const replaying = store.getSnapshot().replay;
     expect(replaying.stepIndex).toBe(0);
     expect(replaying.status).toBe('playing');
+  });
+
+  it('creates a real checkpoint branch from a native operation', () => {
+    const { store } = makeStore();
+    const first = store.run({ autoPlay: false });
+    const parent = first.run as RunRecord;
+    const operation = parent.native?.operations[0];
+    const checkpoint = operation ? parent.native?.checkpoints[operation.checkpointId] : undefined;
+    const resultId = operation?.resultValueId;
+    const snapshot = resultId ? checkpoint?.values[resultId] : undefined;
+    expect(operation).toBeTruthy();
+    expect(snapshot?.kind).toBe('matrix');
+    const checkpointMatrix = snapshot?.matrix;
+    expect(checkpointMatrix).toBeTruthy();
+    const forkMatrix = {
+      ...checkpointMatrix!,
+      id: 'fork-test',
+      name: 'F1',
+      note: 'branch test',
+      shape: `${checkpointMatrix!.rows}×${checkpointMatrix!.cols}`,
+    };
+    store.replaceDocument([...store.getSnapshot().document.objects, forkMatrix], 'F1 × B');
+    const branch = store.run({
+      expression: 'F1 × B',
+      autoPlay: false,
+      lineage: {
+        parentRunId: parent.id,
+        forkedFromStepId: operation!.id,
+        checkpointId: operation!.checkpointId,
+      },
+    });
+    expect(branch.ok).toBe(true);
+    expect(branch.run?.lineage?.parentRunId).toBe(parent.id);
+    expect(branch.run?.lineage?.checkpointId).toBe(operation!.checkpointId);
+    expect(branch.run?.provenance).toBe('native');
+    expect(branch.run?.native?.operations.length).toBeGreaterThan(0);
+    expect(store.getSnapshot().runs).toHaveLength(2);
   });
 
   it('runs a block composition through the same runtime and adds its matrix to the session', () => {

@@ -11,7 +11,7 @@
 - `src/presentation` 能编译出细腻的教学故事板；`src/scene` + `src/renderers/scene` 已证明同一故事可以投射到 2D/层叠/平铺。
 - `src/debug` 有独立函数注册表、trace 雏形、调试控制台。
 - `src/formula` 有 headless typed AST、KaTeX 渲染、槽位与安全测试。
-- 103 项测试通过，严格 TypeScript；这些资产必须保留。
+- 104 项测试通过，严格 TypeScript；这些资产必须保留。
 
 ### 1.2 当前的结构性问题
 
@@ -329,7 +329,7 @@ RunRecord + ReplayCursor + Selection
 
 ### 9.1 必保留
 
-- 现有 103 项 core/formula/debug/architecture 测试通过。
+- 现有 104 项 core/formula/debug/architecture 测试通过。
 - 当前矩阵值、shape、story 计算不回归。
 
 ### 9.2 新增
@@ -368,7 +368,7 @@ RunRecord + ReplayCursor + Selection
 | derived trace 被误当 native | provenance 字段 + 持续 UI 标记 + 文档 |
 | 一次改 CSS 7782 行导致样式失控 | 新 token/主题 + 新组件；旧组件逐项迁移，不在旧 CSS 上叠新风格 |
 | “无持久化”造成误解/数据丢失 | 全界面 `IN-MEMORY` 状态；删除保存/导出入口；文档明示 |
-| 分支实现被低估 | 第一刀只做 rerun/lineage，true fork 等 checkpoint；不伪造 |
+| 分支实现被低估 | Phase E 已为 expression run 提供 native checkpoint + checkpoint branch；function/block checkpoint 后置 |
 | 删除项目系统造成功能缺失 | 用户已确认本阶段不做；把对象/公式/算法资源保留在 session 内 |
 | 组件迁移范围过大 | 先完成 main vertical slice，再迁 secondary modals |
 | 主题 token 违反色卡 | token 表 + 对比度测试 + 设计评审 |

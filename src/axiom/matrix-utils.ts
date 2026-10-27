@@ -15,6 +15,13 @@ export function nextMatrixName(objects: readonly StoredMatrix[]): string {
   return `M${index}`;
 }
 
+export function nextForkName(objects: readonly StoredMatrix[]): string {
+  const used = new Set(objects.map((matrix) => matrix.name));
+  let index = 1;
+  while (used.has(`F${index}`)) index += 1;
+  return `F${index}`;
+}
+
 export function makeId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }

@@ -5,6 +5,7 @@ import type { DebugFunctionDefinition } from './debug/types.js';
 import { TEMPLATES } from './content/library.js';
 import type { FormulaTemplate } from './content/library.js';
 import type { Story } from './presentation/storyTypes.js';
+import type { NativeCheckpoint, NativeOperation, RunRecord } from './runtime/types.js';
 import { createSeedDocument, WorkbenchStore } from './runtime/workbench-store.js';
 import { analyzeObjectsExpression, analyzeWorkbenchDocument } from './runtime/document.js';
 import type { BlockBuildPayload, MatrixDraft, ToastMessage } from './workspace/types.js';
@@ -21,12 +22,13 @@ import ReplayDock from './axiom/components/ReplayDock.js';
 import type { DockTab } from './axiom/components/ReplayDock.js';
 import ResourceDock from './axiom/components/ResourceDock.js';
 import StageView from './axiom/components/StageView.js';
+import ForkDialog from './axiom/components/ForkDialog.js';
 import SplitHandle from './axiom/components/SplitHandle.js';
 import SyntaxDialog from './axiom/components/SyntaxDialog.js';
 import StatusBar from './axiom/components/StatusBar.js';
 import TemplateDialog from './axiom/components/TemplateDialog.js';
 import { useWorkbench } from './axiom/useWorkbench.js';
-import { draftToStored, nextMatrixName, replaceIdentifier, withShape } from './axiom/matrix-utils.js';
+import { draftToStored, makeId, nextForkName, nextMatrixName, replaceIdentifier, withShape } from './axiom/matrix-utils.js';
 import BlockModal from './components/BlockModal.js';
 import MatrixEditorModal from './components/MatrixEditorModal.js';
 import { Icon } from './components/Icons.js';
@@ -78,13 +80,14 @@ export default function AxiomApp() {
   const [template, setTemplate] = useState<FormulaTemplate | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [syntaxOpen, setSyntaxOpen] = useState(false);
+  const [forkDraft, setForkDraft] = useState<{ parentRun: RunRecord; operation: NativeOperation; checkpoint: NativeCheckpoint; matrix: StoredMatrix } | null>(null);
   const [storedRunId, setStoredRunId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   const analysis = useMemo(() => analyzeWorkbenchDocument(workbenchDocument), [workbenchDocument]);
   const suggestedName = useMemo(() => nextMatrixName(workbenchDocument.objects), [workbenchDocument.objects]);
-  const modalOpen = editor.open || template !== null || commandOpen || blockOpen || syntaxOpen;
+  const modalOpen = editor.open || template !== null || commandOpen || blockOpen || syntaxOpen || forkDraft !== null;
 
   const showToast = useCallback((message: string, type: 'info' | 'error' = 'info'): void => {
     setToast({ message, type, id: Date.now() });
@@ -273,6 +276,50 @@ export default function AxiomApp() {
     showToast(`Block matrix ${run.summary.title.replace('分块组合 · ', '')} created; the composer run is inspectable.`);
   };
 
+  const handleForkCheckpoint = (operation: NativeOperation, checkpoint: NativeCheckpoint): void => {
+    if (!run) return;
+    const valueId = operation.resultValueId ?? checkpoint.matrixValueIds.at(-1);
+    const value = valueId ? checkpoint.values[valueId] : undefined;
+    if (!value || value.kind !== 'matrix' || !value.matrix) {
+      showToast('This checkpoint has no matrix value to materialize.', 'error');
+      return;
+    }
+    const matrix: StoredMatrix = withShape({
+      id: makeId(),
+      name: nextForkName(workbenchDocument.objects),
+      rows: value.matrix.rows,
+      cols: value.matrix.cols,
+      data: value.matrix.data.map((row) => [...row]),
+      note: `Checkpoint ${checkpoint.id} from ${run.id} · ${operation.label}`,
+    });
+    setForkDraft({ parentRun: run, operation, checkpoint, matrix });
+  };
+
+  const handleForkCommit = (expression: string): string | null => {
+    if (!forkDraft) return 'No fork checkpoint selected.';
+    const nextObjects = [...workbenchDocument.objects, forkDraft.matrix];
+    const analysis = analyzeObjectsExpression(nextObjects, expression);
+    if (!analysis.ok) return analysis.error;
+    store.replaceDocument(nextObjects, expression);
+    const result = store.run({
+      expression,
+      autoPlay: !prefersReducedMotion(),
+      lineage: {
+        parentRunId: forkDraft.parentRun.id,
+        forkedFromStepId: forkDraft.operation.id,
+        checkpointId: forkDraft.checkpoint.id,
+      },
+    });
+    if (!result.ok) return result.error ?? 'Branch run failed.';
+    setForkDraft(null);
+    setView('stage');
+    openReplay('replay');
+    setDockTab('native');
+    setDockOpen(true);
+    showToast(`BRANCH ${result.run?.id ?? ''} from ${forkDraft.parentRun.id} · ${forkDraft.checkpoint.id}`);
+    return null;
+  };
+
   const handleStoreResult = (): void => {
     const result = run?.resultValue;
     if (!result || result.kind !== 'matrix') {
@@ -302,6 +349,7 @@ export default function AxiomApp() {
     { id: 'run', group: 'RUN', label: 'Run current expression', detail: 'Create a new immutable run', shortcut: 'F5', icon: 'play', run: handleRun },
     { id: 'loop', group: 'RUN', label: replay.loop ? 'Disable replay loop' : 'Enable replay loop', detail: 'Repeat the current run', shortcut: '[ ]', icon: 'reset', run: () => store.setLoop(!replay.loop) },
     { id: 'runs', group: 'RUN', label: 'Open run history', detail: `${runs.length} in-memory runs`, icon: 'table', run: () => { setResourceMode('runs'); setResourceOpen(true); } },
+    { id: 'native', group: 'RUN', label: 'Open native checkpoints', detail: run?.native ? `${run.native.operations.length} exact-Q operations` : 'No native trace for this run', icon: 'fork', run: () => { setDockTab('native'); setDockOpen(true); } },
     { id: 'stage', group: 'VIEW', label: 'Switch to Stage', detail: '2D execution canvas', shortcut: '1', icon: 'grid', run: () => setView('stage') },
     { id: 'flat', group: 'VIEW', label: 'Switch to Flat', detail: 'Tiled synthesis view', shortcut: '2', icon: 'table', run: () => setView('flat') },
     { id: 'layers', group: 'VIEW', label: 'Switch to Layers', detail: 'Execution layer stack', shortcut: '3', icon: 'layers', run: () => setView('layers') },
@@ -544,7 +592,8 @@ export default function AxiomApp() {
                     <>
                       <span className="ax-chip">{run ? `RUN ${run.id.replace('run-', '')}` : 'NO RUN'}</span>
                       {stale && <span className="ax-chip hatch">STALE</span>}
-                      <span className="ax-chip sky">DERIVED</span>
+                      {run && <span className="ax-chip sky">{run.provenance.toUpperCase()}</span>}
+                      {run?.lineage && <span className="ax-chip">BRANCH</span>}
                     </>
                   )}
                   <button type="button" className="ax-icon-button" onClick={() => setView('stage')} title="Reset to stage" aria-label="Reset to stage">
@@ -666,6 +715,7 @@ export default function AxiomApp() {
             onSetDetail={(detail) => store.setDetail(detail)}
             onSetSpeed={(speed) => store.setSpeed(speed)}
             onToggleLoop={() => store.setLoop(!replay.loop)}
+            onFork={handleForkCheckpoint}
           />
         </div>
       </div>
@@ -707,6 +757,15 @@ export default function AxiomApp() {
       />
 
       <SyntaxDialog open={syntaxOpen} onClose={() => setSyntaxOpen(false)} />
+
+      <ForkDialog
+        parent={forkDraft?.parentRun ?? null}
+        operation={forkDraft?.operation ?? null}
+        checkpoint={forkDraft?.checkpoint ?? null}
+        matrix={forkDraft?.matrix ?? null}
+        onClose={() => setForkDraft(null)}
+        onCommit={handleForkCommit}
+      />
 
       <CommandPalette open={commandOpen} actions={commands} onClose={() => setCommandOpen(false)} />
 

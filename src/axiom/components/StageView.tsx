@@ -80,7 +80,7 @@ export default function StageView({
           <div className="ax-stage-eyebrow">
             <span>STEP {String(stepIndex + 1).padStart(2, '0')} / {String(totalSteps).padStart(2, '0')}</span>
             <span className="ax-vsep" />
-            <span>{group?.label ?? 'DERIVED EXECUTION'}</span>
+            <span>{group?.label ?? (run.provenance === 'native' ? 'NATIVE EXECUTION' : 'DERIVED EXECUTION')}</span>
             {stale && <span className="ax-chip hatch">STALE REVIEW</span>}
           </div>
           <h2>{step.title}</h2>
@@ -88,7 +88,7 @@ export default function StageView({
         </div>
         <div className="ax-stage-meta">
           <span className="ax-chip">{run.summary.shapeChain}</span>
-          <span className="ax-chip sky">DERIVED</span>
+          <span className="ax-chip sky">{run.provenance.toUpperCase()}</span>
         </div>
       </header>
 

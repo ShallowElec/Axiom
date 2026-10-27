@@ -122,7 +122,7 @@ export default function TemplateDialog({ template, matrices, onClose, onLaunch }
             <div className="ax-template-meta">
               <span><b>category</b>{template.category}</span>
               <span><b>slots</b>{template.slots.length}</span>
-              <span><b>provenance</b>derived</span>
+              <span><b>provenance</b>native trace · derived presentation</span>
             </div>
             <div className="ax-template-checks">
               {template.checkLines.map((line) => <p key={line}><span>▸</span>{line}</p>)}

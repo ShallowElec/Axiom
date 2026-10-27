@@ -308,7 +308,7 @@ session 初始化：
 ### 9.5 分支/重跑（本阶段边界）
 
 - **Rerun**：用当前文档创建新 run，旧 run 保留（内存）。
-- **True fork from step**：设计目标，待内核 snapshot；本阶段不提供会造成错误联想的假按钮。
+- **True fork from checkpoint**：Phase E 已为 native expression checkpoints 提供；checkpoint 值物化为新对象后创建带 lineage 的分支。
 - Run 列表显示 lineage 字段；若将来有 parent，显示 `from run 02 · step 07`。
 - 关闭/刷新应用即丢弃所有运行；没有“保存”按钮。
 

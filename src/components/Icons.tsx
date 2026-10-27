@@ -25,6 +25,7 @@ const paths: Record<string, ReactNode> = {
   function: <><path d="M14.5 4.5h-2A2.5 2.5 0 0 0 10 7v11m-3-9h7M4.5 20 19 4" /></>,
   layers: <><path d="m12 3.5 9 4.5-9 4.5L3 8l9-4.5Z" /><path d="m5 12 7 3.5L19 12M5 16l7 3.5L19 16" /></>,
   book: <><path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z" /><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H17M9 8h4" /></>,
+  fork: <><circle cx="6" cy="5.5" r="2"/><circle cx="18" cy="5.5" r="2"/><circle cx="12" cy="18.5" r="2"/><path d="M8 5.5h8M7 7.3l4 9.2M17 7.3l-4 9.2"/></>,
   code: <><path d="m9 7-5 5 5 5M15 7l5 5-5 5" /></>,
   sun: <><circle cx="12" cy="12" r="3.6" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /></>,
   moon: <><path d="M20 15.2A8.2 8.2 0 0 1 8.8 4a8.2 8.2 0 1 0 11.2 11.2Z" /></>,

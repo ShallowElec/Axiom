@@ -15,8 +15,8 @@
 
 ### 1.2 本阶段非目标
 
-- 不做内核级 micro-trace（真实 cell 级执行记录）；本阶段微观帧来自现有故事板的 presentation 派生。
-- 不做真实 step checkpoint / 从步骤恢复内核状态。
+- Phase B+C 不做内核级 micro-trace；微观帧来自故事板 presentation 派生。
+- Phase E 已为 expression run 增加 native operation/cell checkpoint；当前 fork 是 checkpoint value materialization，不是对同一 AST 的原地 resume。
 - 不做持久化、trace 导出、项目文件、跨启动恢复。
 - 不做实时流式执行与“边算边看”；先完成“完成后的可检查重放”。
 - 不做 run 对比 UI（数据结构预留，不先显示假入口）。
@@ -89,7 +89,7 @@ interface Selection {
 2. **Seek 不执行计算。** 任何 cursor 移动只选择已存在的 step/scene，不调用数学函数。
 3. **Document 修改不覆盖旧 Run。** 旧 run 保留并标记 stale；新 run 有新 ID。
 4. **Microframe 不是数学事实。** 它可以重新生成；不得成为唯一的值来源。
-5. **Derived provenance 必须可见。** 从现有故事板派生的事件必须显示 `DERIVED`；未来 native trace 显示 `NATIVE`。
+5. **Derived provenance 必须可见。** 从现有故事板派生的 presentation step 必须显示 `DERIVED`；Phase E 的 expression execution 显示 `NATIVE`，其 presentation 仍为 `DERIVED`。
 6. **视图切换不改 Run / Cursor。** Flat、Layers、Stage 消费同一个 cursor 与 presentation doc。
 7. **颜色不是唯一通道。** 播放/选中/错误同时使用文本、形状、线型。
 8. **无持久化。** 运行、cursor、折叠、选择都在内存；刷新即丢失。
@@ -296,7 +296,7 @@ interface ReplaySession {
 规则：
 
 - `provenance` 在 Run 列表、Replay 头部、检查器、Trace 表头持续显示 `DERIVED`。
-- 不修改现有 `core` 数学语义；当前 103 项测试必须保持通过。
+- 不修改现有 `core` 数学语义；当前 104 项测试必须保持通过。
 - `FlatBeat` 不是天然的内核事件；适配层负责把“教学 beat”映射为“step”，并在文档中记录映射规则。
 - 当前 micro 级别没有每个 cell 的独立计算记录，必须从 beat panels/readout 生成 **view-only** microframes。
 - 未来 native engine 必须保留 `provenance: 'native'`，UI 不因适配层而改变交互。
@@ -313,7 +313,7 @@ interface ReplaySession {
 | `Story.resultValue` | final ValueSnapshot |
 
 - 这保留了现有动画的细腻度，但默认 `detail=step` 时只展示 step 终态；展开后使用 microframes。
-- 若一个 beat 跨越多个数学算子，适配层要避免把它标成单一内核事件；首版标注为 derived presentation step，后续 native trace 再拆细。
+- Beat 仍然是 derived presentation step；Phase E 的 native trace 独立记录 exact-Q operation/cell checkpoint，不从 beat 反向伪造。
 
 ## 7. 时间轴与 Replay dock UX
 
@@ -510,7 +510,7 @@ interface ReplaySession {
 - 不自动覆盖旧 run；不重算 seek。
 - 当前阶段的 trace 来自故事板派生，明确标 `DERIVED`。
 - 无持久化；刷新即丢。
-- 真分支需要 checkpoint，当前不伪造。
+- Expression run 已提供 native checkpoint branch（checkpoint value materialization）；function/block 仍无 checkpoint，不显示假分支。
 
 **设计期待定 / 后置项**
 
@@ -518,4 +518,4 @@ interface ReplaySession {
 - 打开旧 run 时默认落在末尾还是第一 step；当前建议落在末尾，播放键从头重播。
 - 第一刀是否展示 disabled 的 `Fork from this step` 入口；建议不展示，避免假能力。
 - 是否在 step 选择时默认暂停播放；建议是。
-- 未来 native trace 是否允许 live stream + detach；本阶段不做。
+- Native trace live stream + detach 仍不做；Phase E 只做完成后的 immutable checkpoints。

@@ -4,6 +4,7 @@ import type { Story } from '../presentation/storyTypes.js';
 import type { BlockBuildPayload } from '../workspace/types.js';
 import { analyzeObjectsExpression } from './document.js';
 import { buildRunFromStory, createFailedRun } from './derived.js';
+import { buildNativeTrace } from './native.js';
 import type {
   ExecutionStep,
   Microframe,
@@ -303,14 +304,34 @@ export class WorkbenchStore {
     try {
       const story = this.runner(expression, nextDocument.objects, options.storyOptions);
       const completedAt = performance.now();
-      const run = buildRunFromStory(story, {
+      let run = buildRunFromStory(story, {
         runId,
         documentRevision: nextDocument.revision,
         kind: options.kind ?? 'expression',
         startedAt,
         completedAt,
         storyOptions: options.storyOptions,
+        lineage: options.lineage,
       });
+      try {
+        const library = Object.fromEntries(nextDocument.objects.map((matrix) => [matrix.name, matrix]));
+        const native = buildNativeTrace({
+          runId,
+          expression,
+          library,
+          durationMs: Math.max(1, completedAt - startedAt),
+        });
+        if (native) {
+          run = {
+            ...run,
+            provenance: 'native',
+            presentationProvenance: 'derived',
+            native,
+          };
+        }
+      } catch {
+        // Native trace failure must not hide a completed exact calculation.
+      }
       const autoPlay = options.autoPlay !== false && run.steps.length > 0;
       const lastIndex = Math.max(0, run.steps.length - 1);
       this.set({

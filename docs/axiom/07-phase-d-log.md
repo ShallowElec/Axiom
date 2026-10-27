@@ -3,6 +3,7 @@
 > 状态：已实施，2026-10-26。
 > 范围：命令面板、可拖拽分栏、Block Composer、Ops/Syntax reference、Scene v2、Formula 中央视图、键盘路径、旧主壳删除。
 > 仍然不做：持久化、native kernel trace、真正 step fork、WASM/AD/MX、完整公式编辑器。
+> **Phase E 更新（2026-10-27）：** expression run 的 native trace、checkpoint 与 checkpoint branch 已在 [08-phase-e-log.md](08-phase-e-log.md) 落地；function/block 仍后置。
 
 ## 1. 本轮落地
 
@@ -84,7 +85,7 @@
 ## 2. 验证
 
 - `npm run typecheck`：通过。
-- `npm test`：103 项通过（core 41、debug 19、formula 31、scene/runtime 7、architecture 5）。
+- `npm test`：103 项通过（Phase E 后为 104；见 08）。
 - `npm run build`：通过；CSS 从旧 212.9 KB 裁到 141.9 KB（gzip 36.9 → 23.4 KB），保留的临时模态与 Formula 中央视图仍通过生产截图检查。
 - 手工验证：
   - Cmd/Ctrl+K → search/select/execute/Esc。
@@ -99,6 +100,6 @@
 ## 3. 后置项
 
 - 临时 MatrixEditor 重做后，删除 `src/legacy-tools.css` 的最后残留。
-- 真实 step checkpoint/fork、native trace、WASM/AD/MX。
+- Function/block 的 native trace/checkpoint、WASM/AD/MX。
 - 可拆卸窗口、布局 preset、命令面板自定义命令。
 - 通用公式编辑器、Scene channels 与更复杂的 table grouping。

@@ -206,6 +206,7 @@ export function buildRunFromStory(story: Story, options: import('./types.js').Bu
     kind: options.kind,
     status: 'completed',
     provenance: 'derived',
+    presentationProvenance: 'derived',
     documentRevision: options.documentRevision,
     expression: story.inputExpression,
     createdAtIso: new Date(options.startedAt).toISOString(),
@@ -230,6 +231,7 @@ export function buildRunFromStory(story: Story, options: import('./types.js').Bu
     microframes,
     scenes,
     resultValue: story.resultValue,
+    lineage: options.lineage,
   };
 }
 
@@ -248,6 +250,7 @@ export function createFailedRun(
     kind: 'expression',
     status: 'failed',
     provenance: 'derived',
+    presentationProvenance: 'derived',
     documentRevision,
     expression,
     createdAtIso: new Date(startedAt).toISOString(),

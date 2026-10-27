@@ -2,7 +2,7 @@
 
 Axiom 是一套本地优先、可检查执行过程的数学工作台。它把矩阵与公式变成**不可变的运行记录**：一次计算可以被运行、暂停、逐步骤检查、切到平铺/层叠视图重播，而重播本身不会再次执行数学。
 
-当前版本是 **Phase B + C + D**：Axiom 工程壳层、Run / Trace / Replay 闭环，以及命令面板、可拖拽分栏、Block Composer、Syntax reference 与 Scene v2 source IDs。设计冻结记录见 [docs/axiom](docs/axiom/README.md)。
+当前版本是 **Phase B + C + D + E**：Axiom 工程壳层与 Replay 之外，expression run 现在带 exact-Q native checkpoints，并支持从 checkpoint 物化状态后创建真实 lineage 分支。设计/实施记录见 [docs/axiom](docs/axiom/README.md)。
 
 ![Axiom 主工作台](screenshots/axiom-main.jpg)
 
@@ -21,15 +21,27 @@ Axiom 是一套本地优先、可检查执行过程的数学工作台。它把�
 ### Run / Trace / Replay
 
 - 每次 Run 捕获文档 revision、表达式与计算时间，生成不可变的 `RunRecord`。
-- 当前 trace 从现有故事板派生，统一标识 `provenance: derived`；不伪装成内核级 native trace。
+- **Expression run 的 trace 已 native 化**：直接记录 exact-Q 的 operation/cell checkpoints；Stage/Flat/Layers 仍是 derived presentation，两者分别显示。
 - 默认按执行步骤播放；可切换 `STEP / MICRO` 粒度。
 - 播放/暂停、前后步骤、首尾跳转、倍速、loop、时间轴跳转；从旧运行打开时落在末尾，按播放从头重播。
 - 选择 trace 行 / 时间轴 step / 矩阵 cell，场景、Trace、检查器同步。
 - 编辑表达式或矩阵不会覆盖旧 run；旧 run 变为 `STALE`，仍可完整重播。再次 Run 会创建新 run。
 - seek、拖动时间轴、切换视图都不调用数学引擎；对应 runtime 测试会阻止重算回归。
-- 当前**没有**真正的 step-level fork。RunRecord 预留 lineage，但 UI 不提供无法兑现的分支按钮。
+- 不再有“假 fork”：只有带 native checkpoint 的 run 才能从 CHECKPOINT 开分支；分支会把 checkpoint 矩阵物化为新对象，再创建带 `parentRunId / checkpointId` lineage 的新 run。
+- Function/block run 没有 native checkpoint，继续标 derived，也不会显示可点的 FORK。
 
 ![重播与微观帧](screenshots/axiom-replay.jpg)
+
+### Native trace 与 checkpoint fork
+
+- 底部 `NATIVE` tab 展示 exact-Q 操作、cell checkpoint、partial/complete 状态。
+- `A × B` 的展示故事板仍是 9 步 derived presentation；native trace 是 4 个 cell + 1 个 result checkpoint。
+- `FORK` 会把检查点矩阵物化为 `F1` 等 session 对象，用户可改写成 `F1 × B` 等分支表达式。
+- 分支 run 在 viewbar/Inspector 显示 `NATIVE`、`BRANCH`、`LINEAGE`，父 run 保持不可变。
+
+![Native checkpoint fork](screenshots/axiom-native-fork.jpg)
+
+![Checkpoint branch](screenshots/axiom-native-branch.jpg)
 
 ### 数学与视图
 
@@ -151,7 +163,8 @@ StageView / FlatView / LayersView / Inspector / Trace / ReplayDock
 - `src/core/` 继续作为纯精确计算内核，不知道 UI、Replay 或 CSS。
 - 新 UI 只通过 `WorkbenchStore` 发起运行，seek/视图切换不触发 engine。
 - Scene 是 renderer-neutral data；Flat/Layers 不直接调用数学函数。
-- 当前 trace 是 derived；native trace 是后续引擎阶段的目标，不混淆两者。
+- Expression run 已经带 native trace；presentation 仍然 derived；function/block run 仍为 derived。
+- Native trace 与 presentation provenance 分开记录，不能用 Stage 的平滑动画冒充 native 执行。
 
 目录：
 
@@ -159,7 +172,7 @@ StageView / FlatView / LayersView / Inspector / Trace / ReplayDock
 src/
   AxiomApp.tsx                  Axiom 工作台编排
   axiom/                        Axiom shell、视图、dock、主题
-  runtime/                      Run/Trace/Replay store 与派生适配器
+  runtime/                      Run/Trace/Replay store、native trace 与派生 presentation
   core/                         exact rational 内核、表达式、operations
   presentation/                 现有 Story 编译器（供 derived adapter 使用）
   scene/                        renderer-neutral Scene
@@ -168,16 +181,17 @@ src/
   components/                   保留的临时 MatrixEditor 与 Block Composer
   content/                      示例矩阵与公式模板
   workspace/                    共享编辑器 payload 类型；旧项目存储已移除
-docs/axiom/                     Phase B+C+D 设计、重播契约、实施记录
+docs/axiom/                     Phase B+C+D+E 设计、重播契约、实施记录
 ```
 
 ## 验证
 
 - `npm run typecheck`：通过
-- `npm test`：**103 项通过**
+- `npm test`：**104 项通过**
 - `npm run build`：Vite + Electron 构建通过
 - 已手工验证：
   - Run `A × B` → pause / seek / step / micro / flat / layers / cell selection
+  - Native tab → 5 exact-Q checkpoints → fork partial F1 → branch expression `F1` → native run-002 with lineage
   - edit → stale → new run
   - determinant template → scalar run
   - Console `matmul` → artifacts → function run
@@ -201,13 +215,15 @@ docs/axiom/                     Phase B+C+D 设计、重播契约、实施记录
 - [实施计划](docs/axiom/04-delivery-plan.md)
 - [Phase B + C 实施记录](docs/axiom/06-implementation-log.md)
 - [Phase D 实施记录](docs/axiom/07-phase-d-log.md)
+- [Phase E 实施记录](docs/axiom/08-phase-e-log.md)
 
 ## 本阶段明确后置
 
 - 持久化：项目文件、保存/恢复、导出、旧数据迁移。
-- 真正的 step checkpoint / fork。
-- native kernel trace、Rust/WASM 核心、AD/VJP、MX/FP4–FP64 精度实验室。
+- native function/block trace（expression 已有 native trace）。
+- Rust/WASM 核心、AD/VJP、MX/FP4–FP64 精度实验室。
+- AST-level resumable checkpoint（当前 fork 是 checkpoint value materialization）。
 - 完整通用 typed formula editor（当前中央视图仍是受控原型）。
 - 可分离调试窗口、自定义命令与真正的多窗口调试。
 
-> 目标仍是先把“运行、检查、重播、组合”做成真实的产品能力，再扩大数学域与执行后端；不把尚未实现的 native/fork/持久化能力做成假入口。
+> 目标仍是先把“运行、检查、重播、组合、分支”做成真实的产品能力，再扩大数学域与执行后端；不把尚未实现的 native/持久化能力做成假入口。

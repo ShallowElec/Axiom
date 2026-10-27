@@ -28,7 +28,7 @@
 
 - 新增 `src/runtime/types.ts`、`derived.ts`、`document.ts`、`workbench-store.ts`。
 - 每次 Run 捕获文档 revision、表达式、时间、引擎信息和不可变 RunRecord。
-- 当前 trace 从现有 Story/FlatBeat 派生，统一标 `provenance: derived`；不伪造 native trace。
+- Phase B+C 时 trace 从 Story/FlatBeat 派生并标 `provenance: derived`；Phase E 已为 expression run 增加 native trace，见 [08-phase-e-log.md](08-phase-e-log.md)。
 - Run 包含 groups、steps、values、stage frames、microframes、flat/layers Scene、summary 和 error。
 - Scene 附加 `sourceStepId` / `sourceValueIds`，便于检查器与后续视图联动。
 - 编辑文档不覆盖旧 run；旧 run 保留并显示 STALE；再次 Run 创建新 run。
@@ -57,7 +57,7 @@
 1. **Scene v2 已进入 runtime。** schemaVersion 升到 2，并加入 scene/node 级 `sourceStepId` / `sourceValueIds`、groups 与 a11y table fallback；channels 仍是后续扩展。
 2. **Microframe 是 presentation 派生，不是内核 micro-trace。** 这与 `provenance: derived` 一致；不能当作 native 执行细节。Formula structure 在 Phase D 已升级为中央视图。
 3. **Formula 结构编辑仍是受控模板原型，不是通用公式编辑器。**
-4. **真正 step-level fork 未实现。** 这是有意为之：当前故事板没有 execution checkpoint；没有 fake UI。
+4. **真正 step-level fork 在 Phase B+C 未实现。** Phase E 已为 native expression checkpoints 增加 checkpoint branch；function/block fork 仍后置。
 5. **Block composer / Ops reference 已在 Phase D 迁入新壳层；公式结构已中央化。**
 6. **底部 dock 可折叠；Phase D 已加入可拖拽高度与横向分栏。** 可拆卸窗口后置。
 7. **命令面板与主操作键盘路径已在 Phase D 加入。**
@@ -68,7 +68,7 @@
 
 - `npm run typecheck`：通过。
 - `npm run build`：Vite + Electron 构建通过。
-- `npm test`：Phase D 后 103 项通过。
+- `npm test`：Phase E 后 104 项通过。
 - 手工 E2E：
   - Run `A × B` → 9 steps → pause/seek/step/micro → view switch → cell select → stale → new run.
   - Run `A + M` → failed run → Problems → no success state.
@@ -82,6 +82,7 @@
 ## 4. Phase D 之后的剩余
 
 - 完整通用公式编辑器；当前 Formula 视图仍是受控三模板原型。
+- Phase E 的 native checkpoint branch 已落地，见 08；native function/block trace 仍后置。
 - 可拆卸调试窗口、布局 preset、自定义命令。
 - 真实 native trace、execution checkpoints、step fork；之后再接 Rust/WASM/AD/MX。
 - 文件/项目持久化作为独立阶段，不与 Axiom shell 混做。

@@ -1,12 +1,13 @@
 import type { StoredMatrix } from '../../core/matrix.js';
 import type { Story } from '../../presentation/storyTypes.js';
-import type { Problem, ReplayState, RunRecord } from '../../runtime/types.js';
+import type { NativeCheckpoint, NativeOperation, Problem, ReplayState, RunRecord } from '../../runtime/types.js';
 import { Icon } from '../../components/Icons.js';
 import ConsolePanel from './ConsolePanel.js';
 import ProblemsPanel from './ProblemsPanel.js';
 import TracePanel from './TracePanel.js';
+import NativePanel from './NativePanel.js';
 
-export type DockTab = 'replay' | 'trace' | 'console' | 'problems';
+export type DockTab = 'replay' | 'trace' | 'native' | 'console' | 'problems';
 
 interface ReplayDockProps {
   open: boolean;
@@ -28,11 +29,13 @@ interface ReplayDockProps {
   onSetDetail: (detail: 'step' | 'micro') => void;
   onSetSpeed: (speed: number) => void;
   onToggleLoop: () => void;
+  onFork: (operation: NativeOperation, checkpoint: NativeCheckpoint) => void;
 }
 
 const tabs: Array<{ id: DockTab; label: string; icon: string }> = [
   { id: 'replay', label: 'REPLAY', icon: 'play' },
   { id: 'trace', label: 'TRACE', icon: 'table' },
+  { id: 'native', label: 'NATIVE', icon: 'fork' },
   { id: 'console', label: 'CONSOLE', icon: 'terminal' },
   { id: 'problems', label: 'PROBLEMS', icon: 'compass' },
 ];
@@ -57,12 +60,14 @@ export default function ReplayDock({
   onSetDetail,
   onSetSpeed,
   onToggleLoop,
+  onFork,
 }: ReplayDockProps) {
   const activeStep = run?.steps[replay.stepIndex] ?? null;
   const activeMicroframes = activeStep ? run?.microframes[activeStep.id] ?? [] : [];
   const counts: Record<DockTab, string> = {
     replay: run ? String(run.steps.length) : '',
     trace: run ? String(run.steps.length) : '',
+    native: run?.native ? String(run.native.operations.length) : '',
     console: '',
     problems: problems.length ? String(problems.length) : '',
   };
@@ -87,7 +92,7 @@ export default function ReplayDock({
           ))}
         </div>
         <div className="ax-dock-actions">
-          {run && <span className="ax-chip sky">DERIVED</span>}
+          {run && <span className="ax-chip sky">{run.provenance.toUpperCase()}</span>}
           <button
             type="button"
             className="ax-row-icon"
@@ -118,6 +123,8 @@ export default function ReplayDock({
                   <span className="ax-replay-meta">
                     <span>{run.steps.length} STEPS</span>
                     <span>{run.provenance.toUpperCase()}</span>
+                    <span>{run.presentationProvenance.toUpperCase()} PRESENTATION</span>
+                    {run.lineage && <span>BRANCH ← {run.lineage.parentRunId}</span>}
                     <span>{replay.status.toUpperCase()}</span>
                   </span>
                 </div>
@@ -213,6 +220,7 @@ export default function ReplayDock({
             )
           )}
           {activeTab === 'trace' && <TracePanel run={run} activeIndex={replay.stepIndex} onSeek={onSeekStep} />}
+          {activeTab === 'native' && <NativePanel run={run} onFork={onFork} />}
           {activeTab === 'console' && (
             <ConsolePanel
               matrices={matrices}

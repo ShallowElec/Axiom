@@ -115,6 +115,41 @@ export interface ExecutionStep {
   microframeIds: MicroframeId[];
 }
 
+export interface NativeCheckpoint {
+  id: string;
+  index: number;
+  operationId: string;
+  label: string;
+  values: Record<ValueId, ValueSnapshot>;
+  matrixValueIds: ValueId[];
+  scalarValueIds: ValueId[];
+  complete: boolean;
+  createdAtIso: string;
+}
+
+export interface NativeOperation {
+  id: string;
+  index: number;
+  kind: 'input' | 'cell' | 'operation' | 'result';
+  op: OperationType | 'input' | 'result';
+  label: string;
+  expression: string;
+  operands: ValueId[];
+  resultValueId?: ValueId;
+  checkpointId: string;
+  coordinates?: { row: number; col: number };
+}
+
+export interface NativeTrace {
+  schemaVersion: 1;
+  runId: RunId;
+  engine: { id: 'exact-q'; version: 1; backend: 'ts' };
+  granularity: 'operation' | 'cell';
+  durationMs?: number;
+  operations: NativeOperation[];
+  checkpoints: Record<string, NativeCheckpoint>;
+}
+
 export interface ValueSnapshot {
   id: ValueId;
   label: string;
@@ -150,6 +185,7 @@ export interface RunRecord {
   kind: RunKind;
   status: RunStatus;
   provenance: Provenance;
+  presentationProvenance: Provenance;
   documentRevision: number;
   expression: string;
   createdAtIso: string;
@@ -165,7 +201,8 @@ export interface RunRecord {
   scenes: Record<StepId, { flat: Scene; layered: Scene }>;
   resultValue?: RuntimeValue;
   error?: RunError;
-  lineage?: { parentRunId: RunId; forkedFromStepId: StepId };
+  native?: NativeTrace;
+  lineage?: { parentRunId: RunId; forkedFromStepId: StepId; checkpointId?: string };
 }
 
 export interface ReplayState {
@@ -213,6 +250,7 @@ export interface RunOptions {
   };
   autoPlay?: boolean;
   kind?: RunKind;
+  lineage?: RunRecord['lineage'];
 }
 
 export type StoryRunner = (
@@ -228,4 +266,5 @@ export interface BuildRunOptions {
   startedAt: number;
   completedAt: number;
   storyOptions?: RunOptions['storyOptions'];
+  lineage?: RunRecord['lineage'];
 }

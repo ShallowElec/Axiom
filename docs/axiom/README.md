@@ -1,6 +1,6 @@
 # Axiom · 设计重构包
 
-> **状态：PHASE B + C + D 已实施；后续为 runtime/engine 阶段。**
+> **状态：PHASE B + C + D + E（native slice）已实施；后续为扩大 runtime/engine。**
 > **基准日期：** 2026-10-26
 > **品牌：** Axiom（英文主品牌；中文正文可称“公理”）
 > **本阶段目标：** 在不重写现有精确矩阵内核的前提下，把“矩阵工坊”重构为工程仪器感的 Axiom 工作台，并建立可检查的 Run / Replay 闭环。
@@ -42,6 +42,7 @@
 | [05-approval-checklist.md](05-approval-checklist.md) | 已批准的设计范围与决策记录 |
 | [06-implementation-log.md](06-implementation-log.md) | Phase B + C 已落地内容、偏差、验证和后置项 |
 | [07-phase-d-log.md](07-phase-d-log.md) | Phase D：命令面板、分栏、Block、Syntax、Scene v2、旧壳清理 |
+| [08-phase-e-log.md](08-phase-e-log.md) | Phase E：native exact-Q trace、checkpoints、Native 面板、checkpoint branch |
 | [reference/COLOR_CARD.md](reference/COLOR_CARD.md) | 原始色卡（逐字保留） |
 | [reference/EP01_color_card.png](reference/EP01_color_card.png) | 色卡样张 |
 | [reference/math_workbench_design_v1.1.md](reference/math_workbench_design_v1.1.md) | 你提供的新架构与 UI 设计稿 v1.1（逐字保留） |
@@ -64,8 +65,8 @@
 ## 4. 本阶段明确不做
 
 - 不实现 Rust/WASM 内核、SQLite 项目文件、`.mathproj`/`.axiomproj`。
-- 不实现真正的内核级 trace、真实 step checkpoint、原生 MX/FP4、AD/VJP。
-- 不把“分支运行”伪装成已经可用；第一版先把不可变 run 与 rerun/lineage 做真，step-level fork 需要等内核 snapshot 能力。
+- 不实现内核对所有函数/块的 native trace；expression 的 native trace/checkpoint branch 已在 Phase E 落地。不实现原生 MX/FP4、AD/VJP。
+- 不伪造分支：Phase E 的 checkpoint branch 仅从真实 native checkpoint 物化；function/block 无 checkpoint 时不提供假按钮。
 - 不做云端、账户、协作、插件市场。
 - 不做完整任意嵌套公式编辑器；第一刀是让现有公式能力进入新的 Axiom 外壳，公式编辑器单独排期。
 - 不改数学语义，不为了视觉效果歪曲 shape/顺序/规则。
@@ -74,12 +75,12 @@
 
 - Phase B + C 已实施：[06-implementation-log.md](06-implementation-log.md)。
 - Phase D 已实施：[07-phase-d-log.md](07-phase-d-log.md)。
-- 本轮未做持久化、真 step fork、native trace、WASM/AD/MX；这些仍是后续阶段。
+- Phase E 已为 expression run 做 native trace/checkpoint branch；function/block native trace、持久化、WASM/AD/MX 仍后置。
 - 旧主壳层文件已删除；旧 CSS 仅保留给临时 MatrixEditor/Block 与 Formula 中央视图使用。
 
 ## 6. 评审方式
 
 - 设计已于 2026-10-26 批准（[05-approval-checklist.md](05-approval-checklist.md)）。
-- Phase B + C + D 已实施；下方长期目标仍是后续阶段。
+- Phase B + C + D + E 已实施；下方长期目标仍是后续阶段。
 
 > 参考设计稿中的 Rust/WASM、SQLite、完整 AD、多窗口等长期目标仍然有效，但它们是 **后续阶段**；本包把它们从第一刀中显式剥离，避免一次重构失焦。

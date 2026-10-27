@@ -145,7 +145,9 @@ export default function Inspector({
               <span className="ax-prop-key">VALUE</span><span className="ax-prop-value strong">{value ?? '—'}</span>
               <span className="ax-prop-key">SOURCE</span><span className="ax-prop-value">{step ? `${step.id}` : '—'}</span>
               <span className="ax-prop-key">PROVENANCE</span><span className="ax-prop-value">{run.provenance.toUpperCase()}</span>
+            <span className="ax-prop-key">PRESENTATION</span><span className="ax-prop-value">{run.presentationProvenance.toUpperCase()}</span>
               <span className="ax-prop-key">RUN REV</span><span className="ax-prop-value">{run.documentRevision}</span>
+              {run.lineage && <><span className="ax-prop-key">LINEAGE</span><span className="ax-prop-value">{run.lineage.parentRunId} · {run.lineage.checkpointId ?? run.lineage.forkedFromStepId}</span></>}
             </div>
 
             {run.status === 'failed' && (
@@ -199,6 +201,8 @@ export default function Inspector({
               <span className="ax-prop-key">PHASE</span><span className="ax-prop-value">{step?.phase.toUpperCase() ?? '—'}</span>
               <span className="ax-prop-key">OP</span><span className="ax-prop-value">{step?.op ?? '—'}</span>
               <span className="ax-prop-key">TRACE</span><span className="ax-prop-value">{run.provenance.toUpperCase()} / {run.engine.backend.toUpperCase()}</span>
+            {run.native && <><span className="ax-prop-key">CHECKPOINTS</span><span className="ax-prop-value">{run.native.operations.length}</span></>}
+            {run.lineage && <><span className="ax-prop-key">LINEAGE</span><span className="ax-prop-value">{run.lineage.parentRunId} · {run.lineage.checkpointId ?? run.lineage.forkedFromStepId}</span></>}
             </div>
             {step && (
               <>
